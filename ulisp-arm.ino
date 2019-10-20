@@ -5,7 +5,8 @@
 */
 
 // Lisp Library
-const char LispLibrary[] PROGMEM = "";
+const char LispLibrary[] PROGMEM = "(defun load-file (filename) (princ \"Loading \") (princ filename) (terpri) (with-sd-card (s filename) (loop (let ((expr (read s))) (if (null expr) (return) (eval expr))))))"
+  "(dolist (fname (with-sd-card (s \"filelist.lsp\") (read s))) (load-file fname))";
 
 // Compile options
 
@@ -13,12 +14,12 @@ const char LispLibrary[] PROGMEM = "";
 #define printfreespace
 #define serialmonitor
 // #define printgcs
-// #define sdcardsupport
-// #define lisplibrary
+#define sdcardsupport
+#define lisplibrary
 
 // Includes
 
-// #include "LispLibrary.h"
+//#include "LispLibrary.h"
 #include <setjmp.h>
 #include <SPI.h>
 #include <Wire.h>
@@ -155,6 +156,7 @@ typedef int PinMode;
   #define WORKSPACESIZE 20480-SDSIZE      /* Objects (8*bytes) */
   #define DATAFLASHSIZE 2048000           /* 2 MBytes */
   #define SYMBOLTABLESIZE 1024            /* Bytes */
+  #define SDCARD_SS_PIN 15
   uint8_t _end;
 
 #elif defined(ARDUINO_GRAND_CENTRAL_M4)
