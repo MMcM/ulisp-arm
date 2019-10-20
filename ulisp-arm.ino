@@ -24,6 +24,7 @@ const char LispLibrary[] PROGMEM = "(defun load-file (filename) (princ \"Loading
 #include <SPI.h>
 #include <Wire.h>
 #include <limits.h>
+#include <Bounce2.h>
 
 #if defined(sdcardsupport)
 #include <SD.h>
@@ -82,7 +83,9 @@ CHARACTERP, STRINGP, STRINGEQ, STRINGLESS, STRINGGREATER, SORT, STRINGFN, CONCAT
 READFROMSTRING, PRINCTOSTRING, PRIN1TOSTRING, LOGAND, LOGIOR, LOGXOR, LOGNOT, ASH, LOGBITP, EVAL, GLOBALS,
 LOCALS, MAKUNBOUND, BREAK, READ, PRIN1, PRINT, PRINC, TERPRI, READBYTE, READLINE, WRITEBYTE, WRITESTRING,
 WRITELINE, RESTARTI2C, GC, ROOM, SAVEIMAGE, LOADIMAGE, CLS, PINMODE, DIGITALREAD, DIGITALWRITE,
-ANALOGREAD, ANALOGWRITE, DELAY, MILLIS, SLEEP, NOTE, EDIT, PPRINT, PPRINTALL, REQUIRE, LISTLIBRARY, ENDFUNCTIONS };
+ANALOGREAD, ANALOGWRITE, DELAY, MILLIS, SLEEP, NOTE, EDIT, PPRINT, PPRINTALL, REQUIRE, LISTLIBRARY,
+MAKEDEBOUNCER, UPDATEDEBOUNCERS, DEBOUNCERVALUE, DEBOUNCERROSE, DEBOUNCERFELL,
+ENDFUNCTIONS };
 
 // Typedefs
 
@@ -3386,6 +3389,53 @@ object *fn_listlibrary (object *args, object *env) {
 
 // Insert your own function definitions here
 
+// Debouncer support
+
+Bounce *debouncers[16];
+int number_of_debouncers = 0;
+
+object *fn_make_debouncer(object *args, object *env) {
+  if (number_of_debouncers == 16) {
+    error2(MAKEDEBOUNCER, PSTR("too many debouncers requested"));
+  }
+  int pin = checkinteger(MAKEDEBOUNCER, first(args));
+  Bounce *debouncer = new Bounce();
+  debouncer->attach(pin, INPUT_PULLUP);
+  debouncers[number_of_debouncers] = debouncer;
+  return number(number_of_debouncers++);
+}
+
+object *fn_update_debouncers(object *args, object *env) {
+  for (int i = 0; i < number_of_debouncers; i++) {
+    debouncers[i]->update();
+  }
+  return nil;
+}
+
+object *fn_debouncer_value(object *args, object *env) {
+  int debouncer_number = checkinteger(DEBOUNCERVALUE, first(args));
+  if (debouncer_number >= number_of_debouncers) {
+    error(DEBOUNCERVALUE, PSTR("debouncer number out of range"), first(args));
+  }
+  return debouncers[debouncer_number]->read() ? tee : nil;
+}
+
+object *fn_debouncer_rose(object *args, object *env) {
+  int debouncer_number = checkinteger(DEBOUNCERROSE, first(args));
+  if (debouncer_number >= number_of_debouncers) {
+    error(DEBOUNCERROSE, PSTR("debouncer number out of range"), first(args));
+  }
+  return debouncers[debouncer_number]->rose() ? tee : nil;
+}
+
+object *fn_debouncer_fell(object *args, object *env) {
+  int debouncer_number = checkinteger(DEBOUNCERFELL, first(args));
+  if (debouncer_number >= number_of_debouncers) {
+    error(DEBOUNCERFELL, PSTR("debouncer number out of range"), first(args));
+  }
+  return debouncers[debouncer_number]->fell() ? tee : nil;
+}
+
 // Built-in procedure names - stored in PROGMEM
 
 const char string0[] PROGMEM = "nil";
@@ -3566,6 +3616,11 @@ const char string174[] PROGMEM = "pprint";
 const char string175[] PROGMEM = "pprintall";
 const char string176[] PROGMEM = "require";
 const char string177[] PROGMEM = "list-library";
+const char string178[] PROGMEM = "make-debouncer";
+const char string179[] PROGMEM = "update-debouncers";
+const char string180[] PROGMEM = "debouncer-value?";
+const char string181[] PROGMEM = "debouncer-rose?";
+const char string182[] PROGMEM = "debouncer-fell?";
 
 const tbl_entry_t lookup_table[] PROGMEM = {
   { string0, NULL, 0, 0 },
@@ -3746,6 +3801,11 @@ const tbl_entry_t lookup_table[] PROGMEM = {
   { string175, fn_pprintall, 0, 0 },
   { string176, fn_require, 1, 1 },
   { string177, fn_listlibrary, 0, 0 },
+  { string178, fn_make_debouncer, 1, 1 },
+  { string179, fn_update_debouncers, 0, 0 },
+  { string180, fn_debouncer_value, 1, 1 },
+  { string181, fn_debouncer_rose, 1, 1 },
+  { string182, fn_debouncer_fell, 1, 1 },
 };
 
 // Table lookup functions
