@@ -16,6 +16,7 @@ const char LispLibrary[] PROGMEM = "(defun load-file (filename) (princ \"Loading
 // #define printgcs
 #define sdcardsupport
 #define lisplibrary
+#define lis3dhsupport
 
 // Includes
 
@@ -31,6 +32,10 @@ const char LispLibrary[] PROGMEM = "(defun load-file (filename) (princ \"Loading
 #define SDSIZE 172
 #else
 #define SDSIZE 0
+#endif
+
+#if defined(lis3dhsupport)
+#include <Adafruit_LIS3DH.h>
 #endif
 
 // C Macros
@@ -85,6 +90,7 @@ LOCALS, MAKUNBOUND, BREAK, READ, PRIN1, PRINT, PRINC, TERPRI, READBYTE, READLINE
 WRITELINE, RESTARTI2C, GC, ROOM, SAVEIMAGE, LOADIMAGE, CLS, PINMODE, DIGITALREAD, DIGITALWRITE,
 ANALOGREAD, ANALOGWRITE, DELAY, MILLIS, SLEEP, NOTE, EDIT, PPRINT, PPRINTALL, REQUIRE, LISTLIBRARY,
 MAKEDEBOUNCER, UPDATEDEBOUNCERS, DEBOUNCERVALUE, DEBOUNCERROSE, DEBOUNCERFELL,
+INITLIS3DH, LIS3DHCLICK, LIS3DHACCELERATION,
 ENDFUNCTIONS };
 
 // Typedefs
@@ -3389,6 +3395,52 @@ object *fn_listlibrary (object *args, object *env) {
 
 // Insert your own function definitions here
 
+// LIS3DH support
+
+#if defined(lis3dhsupport)
+Adafruit_LIS3DH lis = Adafruit_LIS3DH();
+#define CLICK_THRESHOLD 40
+#endif
+
+object *fn_init_lis3dh(object *args, object *env) {
+#if defined(lis3dhsupport)
+  if (!lis.begin(0x18)) {
+    error2(INITLIS3DH, PSTR("couldn't start LIS3DH"));
+  }
+  lis.setRange(LIS3DH_RANGE_4_G);
+  lis.setClick(1, CLICK_THRESHOLD);
+  return nil;
+#else
+  (void) args, (void) env;
+  error2(INITLIS3DH, PSTR("not supported"));
+  return nil;
+#endif
+}
+
+object *fn_lis3dh_click(object *args, object *env) {
+#if defined(lis3dhsupport)
+  uint8_t click = lis.getClick();
+  return (click & 0x10) ? tee : nil;
+#else
+  (void) args, (void) env;
+  error2(LIS3DHCLICK, PSTR("not supported"));
+  return nil;
+#endif
+}
+
+object *fn_lis3dh_acceleration(object *args, object *env) {
+#if defined(lis3dhsupport)
+  sensors_event_t event;
+  lis.getEvent(&event);
+  return cons(number(event.acceleration.x), cons(number(event.acceleration.y), number(event.acceleration.z)));
+#else
+  (void) args, (void) env;
+  error2(LIS3DHACCELERATION, PSTR("not supported"));
+  return nil;
+#endif
+}
+
+
 // Debouncer support
 
 Bounce *debouncers[16];
@@ -3621,6 +3673,10 @@ const char string179[] PROGMEM = "update-debouncers";
 const char string180[] PROGMEM = "debouncer-value?";
 const char string181[] PROGMEM = "debouncer-rose?";
 const char string182[] PROGMEM = "debouncer-fell?";
+const char string183[] PROGMEM = "init-lis3dh";
+const char string184[] PROGMEM = "lis3dh-click?";
+const char string185[] PROGMEM = "lis3dh-acceleration";
+
 
 const tbl_entry_t lookup_table[] PROGMEM = {
   { string0, NULL, 0, 0 },
@@ -3806,6 +3862,9 @@ const tbl_entry_t lookup_table[] PROGMEM = {
   { string180, fn_debouncer_value, 1, 1 },
   { string181, fn_debouncer_rose, 1, 1 },
   { string182, fn_debouncer_fell, 1, 1 },
+  { string183, fn_init_lis3dh, 0, 0 },
+  { string184, fn_lis3dh_click, 0, 0 },
+  { string185, fn_lis3dh_acceleration, 0, 0 },
 };
 
 // Table lookup functions
