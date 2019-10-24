@@ -3467,7 +3467,7 @@ object *fn_update_debouncers(object *args, object *env) {
 object *fn_debouncer_value(object *args, object *env) {
   int debouncer_number = checkinteger(DEBOUNCERVALUE, first(args));
   if (debouncer_number >= number_of_debouncers) {
-    error(DEBOUNCERVALUE, PSTR("debouncer number out of range"), first(args));
+    error(DEBOUNCERVALUE, PSTR("debouncer ID out of range"), first(args));
   }
   return debouncers[debouncer_number]->read() ? tee : nil;
 }
@@ -3475,7 +3475,7 @@ object *fn_debouncer_value(object *args, object *env) {
 object *fn_debouncer_rose(object *args, object *env) {
   int debouncer_number = checkinteger(DEBOUNCERROSE, first(args));
   if (debouncer_number >= number_of_debouncers) {
-    error(DEBOUNCERROSE, PSTR("debouncer number out of range"), first(args));
+    error(DEBOUNCERROSE, PSTR("debouncer ID out of range"), first(args));
   }
   return debouncers[debouncer_number]->rose() ? tee : nil;
 }
@@ -3483,7 +3483,7 @@ object *fn_debouncer_rose(object *args, object *env) {
 object *fn_debouncer_fell(object *args, object *env) {
   int debouncer_number = checkinteger(DEBOUNCERFELL, first(args));
   if (debouncer_number >= number_of_debouncers) {
-    error(DEBOUNCERFELL, PSTR("debouncer number out of range"), first(args));
+    error(DEBOUNCERFELL, PSTR("debouncer ID out of range"), first(args));
   }
   return debouncers[debouncer_number]->fell() ? tee : nil;
 }
