@@ -72,12 +72,14 @@ const char LispLibrary[] PROGMEM = "(defun load-file (filename) (princ \"Loading
 
 const int TRACEMAX = 3; // Number of traced functions
 enum type { ZERO=0, SYMBOL=2, NUMBER=4, STREAM=6, CHARACTER=8, FLOAT=10, STRING=12, PAIR=14 };  // STRING and PAIR must be last
-enum token { UNUSED, BRA, KET, QUO, DOT };
+enum token { UNUSED, BRA, KET, QUO, DOT, QUASIQUO, UNQUO, UNQUOSPLIC};
 enum stream { SERIALSTREAM, I2CSTREAM, SPISTREAM, SDSTREAM };
 
 enum function { NIL, TEE, NOTHING, OPTIONAL, AMPREST, LAMBDA, LET, LETSTAR, CLOSURE, SPECIAL_FORMS, QUOTE,
 DEFUN, DEFVAR, SETQ, LOOP, RETURN, PUSH, POP, INCF, DECF, SETF, DOLIST, DOTIMES, TRACE, UNTRACE,
-FORMILLIS, WITHSERIAL, WITHI2C, WITHSPI, WITHSDCARD, TAIL_FORMS, PROGN, IF, COND, WHEN, UNLESS, CASE, AND,
+FORMILLIS, WITHSERIAL, WITHI2C, WITHSPI, WITHSDCARD,
+MACRO, DEFMACRO, QUASIQUOTE, UNQUOTE, UNQUOTESPLICING,
+TAIL_FORMS, PROGN, IF, COND, WHEN, UNLESS, CASE, AND,
 OR, FUNCTIONS, NOT, NULLFN, CONS, ATOM, LISTP, CONSP, SYMBOLP, STREAMP, EQ, CAR, FIRST, CDR, REST, CAAR,
 CADR, SECOND, CDAR, CDDR, CAAAR, CAADR, CADAR, CADDR, THIRD, CDAAR, CDADR, CDDAR, CDDDR, LENGTH, LIST,
 REVERSE, NTH, ASSOC, MEMBER, APPLY, FUNCALL, APPEND, MAPC, MAPCAR, MAPCAN, ADD, SUBTRACT, MULTIPLY,
@@ -3273,6 +3275,10 @@ boolean quoted (object *obj) {
   return (consp(obj) && car(obj) != NULL && car(obj)->name == QUOTE && consp(cdr(obj)) && cddr(obj) == NULL);
 }
 
+boolean quasiquoted (object *obj) {
+  return (consp(obj) && car(obj) != NULL && car(obj)->name == QUASIQUOTE && consp(cdr(obj)) && cddr(obj) == NULL);
+}
+
 int subwidth (object *obj, int w) {
   if (atom(obj)) return w - atomwidth(obj);
   if (quoted(obj)) return subwidthlist(car(cdr(obj)), w - 1);
@@ -3294,6 +3300,7 @@ void superprint (object *form, int lm, pfun_t pfun) {
     else printobject(form, pfun);
   }
   else if (quoted(form)) { pfun('\''); superprint(car(cdr(form)), lm + 1, pfun); }
+  else if (quasiquoted(form)) { pfun('`'); superprint(car(cdr(form)), lm + 1, pfun); }
   else if (subwidth(form, PPWIDTH - lm) >= 0) supersub(form, lm + PPINDENT, 0, pfun);
   else supersub(form, lm + PPINDENT, 1, pfun);
 }
@@ -3488,6 +3495,111 @@ object *fn_debouncer_fell(object *args, object *env) {
   return debouncers[debouncer_number]->fell() ? tee : nil;
 }
 
+// Macro support
+
+object *sp_defmacro (object *args, object *env) {
+  (void) env;
+  checkargs(DEFMACRO, args);
+  object *var = first(args);
+  if (var->type != SYMBOL) error(DEFMACRO, PSTR("not a symbol"), var);
+  object *val = cons(symbol(MACRO), cdr(args));
+  object *pair = value(var->name,GlobalEnv);
+  if (pair != NULL) { cdr(pair) = val; return var; }
+  push(cons(var, val), GlobalEnv);
+  return var;
+}
+
+object *flatten_and_reverse(object *expr) {
+  if (!consp(expr))
+    return expr;
+
+  object *result = NULL;
+  for (object *cell = expr; cell != NULL; cell = cdr(cell)) {
+    if (!consp(car(cell))) {
+      push(car(cell), result);
+    } else {
+      for (object *subcell = car(cell); subcell != NULL; subcell = cdr(subcell)) {
+        push(car(subcell), result);
+      }
+    }
+  }
+  return result;
+}
+
+object *process_quasiquoted(object *expr, int level, object *env) {
+  Serial.print("**** Processing quasiquote of : ");
+  printobject(expr, pserial);
+  Serial.println("");
+  if (streamp(expr)) {
+    Serial.println("A STREAM");
+  }
+  if (!consp(expr)) {
+    return cons(expr, NULL);
+  }
+
+  if (issymbol(car(expr), QUASIQUOTE)) {
+    object *processed = process_quasiquoted(second(expr), level + 1, env);
+    return cons(cons(symbol(QUASIQUOTE), processed), NULL);
+  } else if (issymbol(car(expr), UNQUOTE)) {
+    Serial.println("**** Processing UNQUOTE");
+    Serial.print("**** At level ");
+    Serial.println(level);
+    if (level == 1) {
+      object *processed = process_quasiquoted(second(expr), level, env);
+      object *result = eval(car(processed), env);
+      Serial.print("**** Result: ");
+      printobject(result, pserial);
+      return cons(result, NULL);
+    } else {
+      object *processed = process_quasiquoted(second(expr), level - 1, env);
+      return cons(cons(symbol(UNQUOTE), processed), NULL);
+    }
+  } else if (issymbol(car(expr), UNQUOTESPLICING)) {
+    Serial.println("**** Processing UNQUOTESPLICING");
+    Serial.print("**** At level ");
+    Serial.println(level);
+    if (level == 1) {
+      object *processed = process_quasiquoted(second(expr), level, env);
+      object *result = eval(car(processed), env);
+      return result;
+    } else {
+      object *processed = process_quasiquoted(second(expr), level - 1, env);
+      return cons(cons(symbol(UNQUOTESPLICING), processed), NULL);
+    }
+  } else {
+    Serial.println("Processing something else");
+    Serial.print("**** At level ");
+    Serial.println(level);
+    object *parts = NULL;
+    for (object *cell = expr; cell != NULL; cell = cdr(cell)) {
+      object *processed = process_quasiquoted(car(cell), level, env);
+      push(processed, parts);
+    }
+    object *result = flatten_and_reverse(parts);
+    return cons(result, NULL);
+  }
+
+
+}
+
+object *sp_quasiquote (object *args, object *env) {
+  checkargs(QUASIQUOTE, args);
+  object *result = process_quasiquoted(car(args), 1, env);
+  return car(result);
+}
+
+object *sp_unquote (object *args, object *env) {
+  (void)args;
+  (void)env;
+  error2(UNQUOTE, PSTR("not supported outside a quasiquote form"));
+}
+
+object *sp_unquote_splicing (object *args, object *env) {
+  (void)args;
+  (void)env;
+  error2(UNQUOTESPLICING, PSTR("not supported outside a quasiquote form"));
+}
+
 // Built-in procedure names - stored in PROGMEM
 
 const char string0[] PROGMEM = "nil";
@@ -3520,162 +3632,167 @@ const char string26[] PROGMEM = "with-serial";
 const char string27[] PROGMEM = "with-i2c";
 const char string28[] PROGMEM = "with-spi";
 const char string29[] PROGMEM = "with-sd-card";
-const char string30[] PROGMEM = "tail_forms";
-const char string31[] PROGMEM = "progn";
-const char string32[] PROGMEM = "if";
-const char string33[] PROGMEM = "cond";
-const char string34[] PROGMEM = "when";
-const char string35[] PROGMEM = "unless";
-const char string36[] PROGMEM = "case";
-const char string37[] PROGMEM = "and";
-const char string38[] PROGMEM = "or";
-const char string39[] PROGMEM = "functions";
-const char string40[] PROGMEM = "not";
-const char string41[] PROGMEM = "null";
-const char string42[] PROGMEM = "cons";
-const char string43[] PROGMEM = "atom";
-const char string44[] PROGMEM = "listp";
-const char string45[] PROGMEM = "consp";
-const char string46[] PROGMEM = "symbolp";
-const char string47[] PROGMEM = "streamp";
-const char string48[] PROGMEM = "eq";
-const char string49[] PROGMEM = "car";
-const char string50[] PROGMEM = "first";
-const char string51[] PROGMEM = "cdr";
-const char string52[] PROGMEM = "rest";
-const char string53[] PROGMEM = "caar";
-const char string54[] PROGMEM = "cadr";
-const char string55[] PROGMEM = "second";
-const char string56[] PROGMEM = "cdar";
-const char string57[] PROGMEM = "cddr";
-const char string58[] PROGMEM = "caaar";
-const char string59[] PROGMEM = "caadr";
-const char string60[] PROGMEM = "cadar";
-const char string61[] PROGMEM = "caddr";
-const char string62[] PROGMEM = "third";
-const char string63[] PROGMEM = "cdaar";
-const char string64[] PROGMEM = "cdadr";
-const char string65[] PROGMEM = "cddar";
-const char string66[] PROGMEM = "cdddr";
-const char string67[] PROGMEM = "length";
-const char string68[] PROGMEM = "list";
-const char string69[] PROGMEM = "reverse";
-const char string70[] PROGMEM = "nth";
-const char string71[] PROGMEM = "assoc";
-const char string72[] PROGMEM = "member";
-const char string73[] PROGMEM = "apply";
-const char string74[] PROGMEM = "funcall";
-const char string75[] PROGMEM = "append";
-const char string76[] PROGMEM = "mapc";
-const char string77[] PROGMEM = "mapcar";
-const char string78[] PROGMEM = "mapcan";
-const char string79[] PROGMEM = "+";
-const char string80[] PROGMEM = "-";
-const char string81[] PROGMEM = "*";
-const char string82[] PROGMEM = "/";
-const char string83[] PROGMEM = "mod";
-const char string84[] PROGMEM = "1+";
-const char string85[] PROGMEM = "1-";
-const char string86[] PROGMEM = "abs";
-const char string87[] PROGMEM = "random";
-const char string88[] PROGMEM = "max";
-const char string89[] PROGMEM = "min";
-const char string90[] PROGMEM = "/=";
-const char string91[] PROGMEM = "=";
-const char string92[] PROGMEM = "<";
-const char string93[] PROGMEM = "<=";
-const char string94[] PROGMEM = ">";
-const char string95[] PROGMEM = ">=";
-const char string96[] PROGMEM = "plusp";
-const char string97[] PROGMEM = "minusp";
-const char string98[] PROGMEM = "zerop";
-const char string99[] PROGMEM = "oddp";
-const char string100[] PROGMEM = "evenp";
-const char string101[] PROGMEM = "integerp";
-const char string102[] PROGMEM = "numberp";
-const char string103[] PROGMEM = "float";
-const char string104[] PROGMEM = "floatp";
-const char string105[] PROGMEM = "sin";
-const char string106[] PROGMEM = "cos";
-const char string107[] PROGMEM = "tan";
-const char string108[] PROGMEM = "asin";
-const char string109[] PROGMEM = "acos";
-const char string110[] PROGMEM = "atan";
-const char string111[] PROGMEM = "sinh";
-const char string112[] PROGMEM = "cosh";
-const char string113[] PROGMEM = "tanh";
-const char string114[] PROGMEM = "exp";
-const char string115[] PROGMEM = "sqrt";
-const char string116[] PROGMEM = "log";
-const char string117[] PROGMEM = "expt";
-const char string118[] PROGMEM = "ceiling";
-const char string119[] PROGMEM = "floor";
-const char string120[] PROGMEM = "truncate";
-const char string121[] PROGMEM = "round";
-const char string122[] PROGMEM = "char";
-const char string123[] PROGMEM = "char-code";
-const char string124[] PROGMEM = "code-char";
-const char string125[] PROGMEM = "characterp";
-const char string126[] PROGMEM = "stringp";
-const char string127[] PROGMEM = "string=";
-const char string128[] PROGMEM = "string<";
-const char string129[] PROGMEM = "string>";
-const char string130[] PROGMEM = "sort";
-const char string131[] PROGMEM = "string";
-const char string132[] PROGMEM = "concatenate";
-const char string133[] PROGMEM = "subseq";
-const char string134[] PROGMEM = "read-from-string";
-const char string135[] PROGMEM = "princ-to-string";
-const char string136[] PROGMEM = "prin1-to-string";
-const char string137[] PROGMEM = "logand";
-const char string138[] PROGMEM = "logior";
-const char string139[] PROGMEM = "logxor";
-const char string140[] PROGMEM = "lognot";
-const char string141[] PROGMEM = "ash";
-const char string142[] PROGMEM = "logbitp";
-const char string143[] PROGMEM = "eval";
-const char string144[] PROGMEM = "globals";
-const char string145[] PROGMEM = "locals";
-const char string146[] PROGMEM = "makunbound";
-const char string147[] PROGMEM = "break";
-const char string148[] PROGMEM = "read";
-const char string149[] PROGMEM = "prin1";
-const char string150[] PROGMEM = "print";
-const char string151[] PROGMEM = "princ";
-const char string152[] PROGMEM = "terpri";
-const char string153[] PROGMEM = "read-byte";
-const char string154[] PROGMEM = "read-line";
-const char string155[] PROGMEM = "write-byte";
-const char string156[] PROGMEM = "write-string";
-const char string157[] PROGMEM = "write-line";
-const char string158[] PROGMEM = "restart-i2c";
-const char string159[] PROGMEM = "gc";
-const char string160[] PROGMEM = "room";
-const char string161[] PROGMEM = "save-image";
-const char string162[] PROGMEM = "load-image";
-const char string163[] PROGMEM = "cls";
-const char string164[] PROGMEM = "pinmode";
-const char string165[] PROGMEM = "digitalread";
-const char string166[] PROGMEM = "digitalwrite";
-const char string167[] PROGMEM = "analogread";
-const char string168[] PROGMEM = "analogwrite";
-const char string169[] PROGMEM = "delay";
-const char string170[] PROGMEM = "millis";
-const char string171[] PROGMEM = "sleep";
-const char string172[] PROGMEM = "note";
-const char string173[] PROGMEM = "edit";
-const char string174[] PROGMEM = "pprint";
-const char string175[] PROGMEM = "pprintall";
-const char string176[] PROGMEM = "require";
-const char string177[] PROGMEM = "list-library";
-const char string178[] PROGMEM = "make-debouncer";
-const char string179[] PROGMEM = "update-debouncers";
-const char string180[] PROGMEM = "debouncer-value?";
-const char string181[] PROGMEM = "debouncer-rose?";
-const char string182[] PROGMEM = "debouncer-fell?";
-const char string183[] PROGMEM = "init-lis3dh";
-const char string184[] PROGMEM = "lis3dh-click?";
-const char string185[] PROGMEM = "lis3dh-acceleration";
+const char string30[] PROGMEM = "macro";
+const char string31[] PROGMEM = "defmacro";
+const char string32[] PROGMEM = "quasiquote";
+const char string33[] PROGMEM = "unquote";
+const char string34[] PROGMEM = "unquote-splicing";
+const char string35[] PROGMEM = "tail_forms";
+const char string36[] PROGMEM = "progn";
+const char string37[] PROGMEM = "if";
+const char string38[] PROGMEM = "cond";
+const char string39[] PROGMEM = "when";
+const char string40[] PROGMEM = "unless";
+const char string41[] PROGMEM = "case";
+const char string42[] PROGMEM = "and";
+const char string43[] PROGMEM = "or";
+const char string44[] PROGMEM = "functions";
+const char string45[] PROGMEM = "not";
+const char string46[] PROGMEM = "null";
+const char string47[] PROGMEM = "cons";
+const char string48[] PROGMEM = "atom";
+const char string49[] PROGMEM = "listp";
+const char string50[] PROGMEM = "consp";
+const char string51[] PROGMEM = "symbolp";
+const char string52[] PROGMEM = "streamp";
+const char string53[] PROGMEM = "eq";
+const char string54[] PROGMEM = "car";
+const char string55[] PROGMEM = "first";
+const char string56[] PROGMEM = "cdr";
+const char string57[] PROGMEM = "rest";
+const char string58[] PROGMEM = "caar";
+const char string59[] PROGMEM = "cadr";
+const char string60[] PROGMEM = "second";
+const char string61[] PROGMEM = "cdar";
+const char string62[] PROGMEM = "cddr";
+const char string63[] PROGMEM = "caaar";
+const char string64[] PROGMEM = "caadr";
+const char string65[] PROGMEM = "cadar";
+const char string66[] PROGMEM = "caddr";
+const char string67[] PROGMEM = "third";
+const char string68[] PROGMEM = "cdaar";
+const char string69[] PROGMEM = "cdadr";
+const char string70[] PROGMEM = "cddar";
+const char string71[] PROGMEM = "cdddr";
+const char string72[] PROGMEM = "length";
+const char string73[] PROGMEM = "list";
+const char string74[] PROGMEM = "reverse";
+const char string75[] PROGMEM = "nth";
+const char string76[] PROGMEM = "assoc";
+const char string77[] PROGMEM = "member";
+const char string78[] PROGMEM = "apply";
+const char string79[] PROGMEM = "funcall";
+const char string80[] PROGMEM = "append";
+const char string81[] PROGMEM = "mapc";
+const char string82[] PROGMEM = "mapcar";
+const char string83[] PROGMEM = "mapcan";
+const char string84[] PROGMEM = "+";
+const char string85[] PROGMEM = "-";
+const char string86[] PROGMEM = "*";
+const char string87[] PROGMEM = "/";
+const char string88[] PROGMEM = "mod";
+const char string89[] PROGMEM = "1+";
+const char string90[] PROGMEM = "1-";
+const char string91[] PROGMEM = "abs";
+const char string92[] PROGMEM = "random";
+const char string93[] PROGMEM = "max";
+const char string94[] PROGMEM = "min";
+const char string95[] PROGMEM = "/=";
+const char string96[] PROGMEM = "=";
+const char string97[] PROGMEM = "<";
+const char string98[] PROGMEM = "<=";
+const char string99[] PROGMEM = ">";
+const char string100[] PROGMEM = ">=";
+const char string101[] PROGMEM = "plusp";
+const char string102[] PROGMEM = "minusp";
+const char string103[] PROGMEM = "zerop";
+const char string104[] PROGMEM = "oddp";
+const char string105[] PROGMEM = "evenp";
+const char string106[] PROGMEM = "integerp";
+const char string107[] PROGMEM = "numberp";
+const char string108[] PROGMEM = "float";
+const char string109[] PROGMEM = "floatp";
+const char string110[] PROGMEM = "sin";
+const char string111[] PROGMEM = "cos";
+const char string112[] PROGMEM = "tan";
+const char string113[] PROGMEM = "asin";
+const char string114[] PROGMEM = "acos";
+const char string115[] PROGMEM = "atan";
+const char string116[] PROGMEM = "sinh";
+const char string117[] PROGMEM = "cosh";
+const char string118[] PROGMEM = "tanh";
+const char string119[] PROGMEM = "exp";
+const char string120[] PROGMEM = "sqrt";
+const char string121[] PROGMEM = "log";
+const char string122[] PROGMEM = "expt";
+const char string123[] PROGMEM = "ceiling";
+const char string124[] PROGMEM = "floor";
+const char string125[] PROGMEM = "truncate";
+const char string126[] PROGMEM = "round";
+const char string127[] PROGMEM = "char";
+const char string128[] PROGMEM = "char-code";
+const char string129[] PROGMEM = "code-char";
+const char string130[] PROGMEM = "characterp";
+const char string131[] PROGMEM = "stringp";
+const char string132[] PROGMEM = "string=";
+const char string133[] PROGMEM = "string<";
+const char string134[] PROGMEM = "string>";
+const char string135[] PROGMEM = "sort";
+const char string136[] PROGMEM = "string";
+const char string137[] PROGMEM = "concatenate";
+const char string138[] PROGMEM = "subseq";
+const char string139[] PROGMEM = "read-from-string";
+const char string140[] PROGMEM = "princ-to-string";
+const char string141[] PROGMEM = "prin1-to-string";
+const char string142[] PROGMEM = "logand";
+const char string143[] PROGMEM = "logior";
+const char string144[] PROGMEM = "logxor";
+const char string145[] PROGMEM = "lognot";
+const char string146[] PROGMEM = "ash";
+const char string147[] PROGMEM = "logbitp";
+const char string148[] PROGMEM = "eval";
+const char string149[] PROGMEM = "globals";
+const char string150[] PROGMEM = "locals";
+const char string151[] PROGMEM = "makunbound";
+const char string152[] PROGMEM = "break";
+const char string153[] PROGMEM = "read";
+const char string154[] PROGMEM = "prin1";
+const char string155[] PROGMEM = "print";
+const char string156[] PROGMEM = "princ";
+const char string157[] PROGMEM = "terpri";
+const char string158[] PROGMEM = "read-byte";
+const char string159[] PROGMEM = "read-line";
+const char string160[] PROGMEM = "write-byte";
+const char string161[] PROGMEM = "write-string";
+const char string162[] PROGMEM = "write-line";
+const char string163[] PROGMEM = "restart-i2c";
+const char string164[] PROGMEM = "gc";
+const char string165[] PROGMEM = "room";
+const char string166[] PROGMEM = "save-image";
+const char string167[] PROGMEM = "load-image";
+const char string168[] PROGMEM = "cls";
+const char string169[] PROGMEM = "pinmode";
+const char string170[] PROGMEM = "digitalread";
+const char string171[] PROGMEM = "digitalwrite";
+const char string172[] PROGMEM = "analogread";
+const char string173[] PROGMEM = "analogwrite";
+const char string174[] PROGMEM = "delay";
+const char string175[] PROGMEM = "millis";
+const char string176[] PROGMEM = "sleep";
+const char string177[] PROGMEM = "note";
+const char string178[] PROGMEM = "edit";
+const char string179[] PROGMEM = "pprint";
+const char string180[] PROGMEM = "pprintall";
+const char string181[] PROGMEM = "require";
+const char string182[] PROGMEM = "list-library";
+const char string183[] PROGMEM = "make-debouncer";
+const char string184[] PROGMEM = "update-debouncers";
+const char string185[] PROGMEM = "debouncer-value?";
+const char string186[] PROGMEM = "debouncer-rose?";
+const char string187[] PROGMEM = "debouncer-fell?";
+const char string188[] PROGMEM = "init-lis3dh";
+const char string189[] PROGMEM = "lis3dh-bump?";
+const char string190[] PROGMEM = "lis3dh-acceleration";
 
 
 const tbl_entry_t lookup_table[] PROGMEM = {
@@ -3709,162 +3826,167 @@ const tbl_entry_t lookup_table[] PROGMEM = {
   { string27, sp_withi2c, 1, 127 },
   { string28, sp_withspi, 1, 127 },
   { string29, sp_withsdcard, 2, 127 },
-  { string30, NULL, NIL, NIL },
-  { string31, tf_progn, 0, 127 },
-  { string32, tf_if, 2, 3 },
-  { string33, tf_cond, 0, 127 },
-  { string34, tf_when, 1, 127 },
-  { string35, tf_unless, 1, 127 },
-  { string36, tf_case, 1, 127 },
-  { string37, tf_and, 0, 127 },
-  { string38, tf_or, 0, 127 },
-  { string39, NULL, NIL, NIL },
-  { string40, fn_not, 1, 1 },
-  { string41, fn_not, 1, 1 },
-  { string42, fn_cons, 2, 2 },
-  { string43, fn_atom, 1, 1 },
-  { string44, fn_listp, 1, 1 },
-  { string45, fn_consp, 1, 1 },
-  { string46, fn_symbolp, 1, 1 },
-  { string47, fn_streamp, 1, 1 },
-  { string48, fn_eq, 2, 2 },
-  { string49, fn_car, 1, 1 },
-  { string50, fn_car, 1, 1 },
-  { string51, fn_cdr, 1, 1 },
-  { string52, fn_cdr, 1, 1 },
-  { string53, fn_caar, 1, 1 },
-  { string54, fn_cadr, 1, 1 },
-  { string55, fn_cadr, 1, 1 },
-  { string56, fn_cdar, 1, 1 },
-  { string57, fn_cddr, 1, 1 },
-  { string58, fn_caaar, 1, 1 },
-  { string59, fn_caadr, 1, 1 },
-  { string60, fn_cadar, 1, 1 },
-  { string61, fn_caddr, 1, 1 },
-  { string62, fn_caddr, 1, 1 },
-  { string63, fn_cdaar, 1, 1 },
-  { string64, fn_cdadr, 1, 1 },
-  { string65, fn_cddar, 1, 1 },
-  { string66, fn_cdddr, 1, 1 },
-  { string67, fn_length, 1, 1 },
-  { string68, fn_list, 0, 127 },
-  { string69, fn_reverse, 1, 1 },
-  { string70, fn_nth, 2, 2 },
-  { string71, fn_assoc, 2, 2 },
-  { string72, fn_member, 2, 2 },
-  { string73, fn_apply, 2, 127 },
-  { string74, fn_funcall, 1, 127 },
-  { string75, fn_append, 0, 127 },
-  { string76, fn_mapc, 2, 127 },
-  { string77, fn_mapcar, 2, 127 },
-  { string78, fn_mapcan, 2, 127 },
-  { string79, fn_add, 0, 127 },
-  { string80, fn_subtract, 1, 127 },
-  { string81, fn_multiply, 0, 127 },
-  { string82, fn_divide, 1, 127 },
-  { string83, fn_mod, 2, 2 },
-  { string84, fn_oneplus, 1, 1 },
-  { string85, fn_oneminus, 1, 1 },
-  { string86, fn_abs, 1, 1 },
-  { string87, fn_random, 1, 1 },
-  { string88, fn_maxfn, 1, 127 },
-  { string89, fn_minfn, 1, 127 },
-  { string90, fn_noteq, 1, 127 },
-  { string91, fn_numeq, 1, 127 },
-  { string92, fn_less, 1, 127 },
-  { string93, fn_lesseq, 1, 127 },
-  { string94, fn_greater, 1, 127 },
-  { string95, fn_greatereq, 1, 127 },
-  { string96, fn_plusp, 1, 1 },
-  { string97, fn_minusp, 1, 1 },
-  { string98, fn_zerop, 1, 1 },
-  { string99, fn_oddp, 1, 1 },
-  { string100, fn_evenp, 1, 1 },
-  { string101, fn_integerp, 1, 1 },
-  { string102, fn_numberp, 1, 1 },
-  { string103, fn_floatfn, 1, 1 },
-  { string104, fn_floatp, 1, 1 },
-  { string105, fn_sin, 1, 1 },
-  { string106, fn_cos, 1, 1 },
-  { string107, fn_tan, 1, 1 },
-  { string108, fn_asin, 1, 1 },
-  { string109, fn_acos, 1, 1 },
-  { string110, fn_atan, 1, 2 },
-  { string111, fn_sinh, 1, 1 },
-  { string112, fn_cosh, 1, 1 },
-  { string113, fn_tanh, 1, 1 },
-  { string114, fn_exp, 1, 1 },
-  { string115, fn_sqrt, 1, 1 },
-  { string116, fn_log, 1, 2 },
-  { string117, fn_expt, 2, 2 },
-  { string118, fn_ceiling, 1, 2 },
-  { string119, fn_floor, 1, 2 },
-  { string120, fn_truncate, 1, 2 },
-  { string121, fn_round, 1, 2 },
-  { string122, fn_char, 2, 2 },
-  { string123, fn_charcode, 1, 1 },
-  { string124, fn_codechar, 1, 1 },
-  { string125, fn_characterp, 1, 1 },
-  { string126, fn_stringp, 1, 1 },
-  { string127, fn_stringeq, 2, 2 },
-  { string128, fn_stringless, 2, 2 },
-  { string129, fn_stringgreater, 2, 2 },
-  { string130, fn_sort, 2, 2 },
-  { string131, fn_stringfn, 1, 1 },
-  { string132, fn_concatenate, 1, 127 },
-  { string133, fn_subseq, 2, 3 },
-  { string134, fn_readfromstring, 1, 1 },
-  { string135, fn_princtostring, 1, 1 },
-  { string136, fn_prin1tostring, 1, 1 },
-  { string137, fn_logand, 0, 127 },
-  { string138, fn_logior, 0, 127 },
-  { string139, fn_logxor, 0, 127 },
-  { string140, fn_lognot, 1, 1 },
-  { string141, fn_ash, 2, 2 },
-  { string142, fn_logbitp, 2, 2 },
-  { string143, fn_eval, 1, 1 },
-  { string144, fn_globals, 0, 0 },
-  { string145, fn_locals, 0, 0 },
-  { string146, fn_makunbound, 1, 1 },
-  { string147, fn_break, 0, 0 },
-  { string148, fn_read, 0, 1 },
-  { string149, fn_prin1, 1, 2 },
-  { string150, fn_print, 1, 2 },
-  { string151, fn_princ, 1, 2 },
-  { string152, fn_terpri, 0, 1 },
-  { string153, fn_readbyte, 0, 2 },
-  { string154, fn_readline, 0, 1 },
-  { string155, fn_writebyte, 1, 2 },
-  { string156, fn_writestring, 1, 2 },
-  { string157, fn_writeline, 1, 2 },
-  { string158, fn_restarti2c, 1, 2 },
-  { string159, fn_gc, 0, 0 },
-  { string160, fn_room, 0, 0 },
-  { string161, fn_saveimage, 0, 1 },
-  { string162, fn_loadimage, 0, 1 },
-  { string163, fn_cls, 0, 0 },
-  { string164, fn_pinmode, 2, 2 },
-  { string165, fn_digitalread, 1, 1 },
-  { string166, fn_digitalwrite, 2, 2 },
-  { string167, fn_analogread, 1, 1 },
-  { string168, fn_analogwrite, 2, 2 },
-  { string169, fn_delay, 1, 1 },
-  { string170, fn_millis, 0, 0 },
-  { string171, fn_sleep, 1, 1 },
-  { string172, fn_note, 0, 3 },
-  { string173, fn_edit, 1, 1 },
-  { string174, fn_pprint, 1, 2 },
-  { string175, fn_pprintall, 0, 0 },
-  { string176, fn_require, 1, 1 },
-  { string177, fn_listlibrary, 0, 0 },
-  { string178, fn_make_debouncer, 1, 1 },
-  { string179, fn_update_debouncers, 0, 0 },
-  { string180, fn_debouncer_value, 1, 1 },
-  { string181, fn_debouncer_rose, 1, 1 },
-  { string182, fn_debouncer_fell, 1, 1 },
-  { string183, fn_init_lis3dh, 0, 0 },
-  { string184, fn_lis3dh_click, 0, 0 },
-  { string185, fn_lis3dh_acceleration, 0, 0 },
+  { string30, NULL, 0, 0 },
+  { string31, sp_defmacro, 0, 127 },
+  { string32, sp_quasiquote, 1, 1 },
+  { string33, sp_unquote, 1, 1 },
+  { string34, sp_unquote_splicing, 1, 1 },
+  { string35, NULL, NIL, NIL },
+  { string36, tf_progn, 0, 127 },
+  { string37, tf_if, 2, 3 },
+  { string38, tf_cond, 0, 127 },
+  { string39, tf_when, 1, 127 },
+  { string40, tf_unless, 1, 127 },
+  { string41, tf_case, 1, 127 },
+  { string42, tf_and, 0, 127 },
+  { string43, tf_or, 0, 127 },
+  { string44, NULL, NIL, NIL },
+  { string45, fn_not, 1, 1 },
+  { string46, fn_not, 1, 1 },
+  { string47, fn_cons, 2, 2 },
+  { string48, fn_atom, 1, 1 },
+  { string49, fn_listp, 1, 1 },
+  { string50, fn_consp, 1, 1 },
+  { string51, fn_symbolp, 1, 1 },
+  { string52, fn_streamp, 1, 1 },
+  { string53, fn_eq, 2, 2 },
+  { string54, fn_car, 1, 1 },
+  { string55, fn_car, 1, 1 },
+  { string56, fn_cdr, 1, 1 },
+  { string57, fn_cdr, 1, 1 },
+  { string58, fn_caar, 1, 1 },
+  { string59, fn_cadr, 1, 1 },
+  { string60, fn_cadr, 1, 1 },
+  { string61, fn_cdar, 1, 1 },
+  { string62, fn_cddr, 1, 1 },
+  { string63, fn_caaar, 1, 1 },
+  { string64, fn_caadr, 1, 1 },
+  { string65, fn_cadar, 1, 1 },
+  { string66, fn_caddr, 1, 1 },
+  { string67, fn_caddr, 1, 1 },
+  { string68, fn_cdaar, 1, 1 },
+  { string69, fn_cdadr, 1, 1 },
+  { string70, fn_cddar, 1, 1 },
+  { string71, fn_cdddr, 1, 1 },
+  { string72, fn_length, 1, 1 },
+  { string73, fn_list, 0, 127 },
+  { string74, fn_reverse, 1, 1 },
+  { string75, fn_nth, 2, 2 },
+  { string76, fn_assoc, 2, 2 },
+  { string77, fn_member, 2, 2 },
+  { string78, fn_apply, 2, 127 },
+  { string79, fn_funcall, 1, 127 },
+  { string80, fn_append, 0, 127 },
+  { string81, fn_mapc, 2, 127 },
+  { string82, fn_mapcar, 2, 127 },
+  { string83, fn_mapcan, 2, 127 },
+  { string84, fn_add, 0, 127 },
+  { string85, fn_subtract, 1, 127 },
+  { string86, fn_multiply, 0, 127 },
+  { string87, fn_divide, 1, 127 },
+  { string88, fn_mod, 2, 2 },
+  { string89, fn_oneplus, 1, 1 },
+  { string90, fn_oneminus, 1, 1 },
+  { string91, fn_abs, 1, 1 },
+  { string92, fn_random, 1, 1 },
+  { string93, fn_maxfn, 1, 127 },
+  { string94, fn_minfn, 1, 127 },
+  { string95, fn_noteq, 1, 127 },
+  { string96, fn_numeq, 1, 127 },
+  { string97, fn_less, 1, 127 },
+  { string98, fn_lesseq, 1, 127 },
+  { string99, fn_greater, 1, 127 },
+  { string100, fn_greatereq, 1, 127 },
+  { string101, fn_plusp, 1, 1 },
+  { string102, fn_minusp, 1, 1 },
+  { string103, fn_zerop, 1, 1 },
+  { string104, fn_oddp, 1, 1 },
+  { string105, fn_evenp, 1, 1 },
+  { string106, fn_integerp, 1, 1 },
+  { string107, fn_numberp, 1, 1 },
+  { string108, fn_floatfn, 1, 1 },
+  { string109, fn_floatp, 1, 1 },
+  { string110, fn_sin, 1, 1 },
+  { string111, fn_cos, 1, 1 },
+  { string112, fn_tan, 1, 1 },
+  { string113, fn_asin, 1, 1 },
+  { string114, fn_acos, 1, 1 },
+  { string115, fn_atan, 1, 2 },
+  { string116, fn_sinh, 1, 1 },
+  { string117, fn_cosh, 1, 1 },
+  { string118, fn_tanh, 1, 1 },
+  { string119, fn_exp, 1, 1 },
+  { string120, fn_sqrt, 1, 1 },
+  { string121, fn_log, 1, 2 },
+  { string122, fn_expt, 2, 2 },
+  { string123, fn_ceiling, 1, 2 },
+  { string124, fn_floor, 1, 2 },
+  { string125, fn_truncate, 1, 2 },
+  { string126, fn_round, 1, 2 },
+  { string127, fn_char, 2, 2 },
+  { string128, fn_charcode, 1, 1 },
+  { string129, fn_codechar, 1, 1 },
+  { string130, fn_characterp, 1, 1 },
+  { string131, fn_stringp, 1, 1 },
+  { string132, fn_stringeq, 2, 2 },
+  { string133, fn_stringless, 2, 2 },
+  { string134, fn_stringgreater, 2, 2 },
+  { string135, fn_sort, 2, 2 },
+  { string136, fn_stringfn, 1, 1 },
+  { string137, fn_concatenate, 1, 127 },
+  { string138, fn_subseq, 2, 3 },
+  { string139, fn_readfromstring, 1, 1 },
+  { string140, fn_princtostring, 1, 1 },
+  { string141, fn_prin1tostring, 1, 1 },
+  { string142, fn_logand, 0, 127 },
+  { string143, fn_logior, 0, 127 },
+  { string144, fn_logxor, 0, 127 },
+  { string145, fn_lognot, 1, 1 },
+  { string146, fn_ash, 2, 2 },
+  { string147, fn_logbitp, 2, 2 },
+  { string148, fn_eval, 1, 1 },
+  { string149, fn_globals, 0, 0 },
+  { string150, fn_locals, 0, 0 },
+  { string151, fn_makunbound, 1, 1 },
+  { string152, fn_break, 0, 0 },
+  { string153, fn_read, 0, 1 },
+  { string154, fn_prin1, 1, 2 },
+  { string155, fn_print, 1, 2 },
+  { string156, fn_princ, 1, 2 },
+  { string157, fn_terpri, 0, 1 },
+  { string158, fn_readbyte, 0, 2 },
+  { string159, fn_readline, 0, 1 },
+  { string160, fn_writebyte, 1, 2 },
+  { string161, fn_writestring, 1, 2 },
+  { string162, fn_writeline, 1, 2 },
+  { string163, fn_restarti2c, 1, 2 },
+  { string164, fn_gc, 0, 0 },
+  { string165, fn_room, 0, 0 },
+  { string166, fn_saveimage, 0, 1 },
+  { string167, fn_loadimage, 0, 1 },
+  { string168, fn_cls, 0, 0 },
+  { string169, fn_pinmode, 2, 2 },
+  { string170, fn_digitalread, 1, 1 },
+  { string171, fn_digitalwrite, 2, 2 },
+  { string172, fn_analogread, 1, 1 },
+  { string173, fn_analogwrite, 2, 2 },
+  { string174, fn_delay, 1, 1 },
+  { string175, fn_millis, 0, 0 },
+  { string176, fn_sleep, 1, 1 },
+  { string177, fn_note, 0, 3 },
+  { string178, fn_edit, 1, 1 },
+  { string179, fn_pprint, 1, 2 },
+  { string180, fn_pprintall, 0, 0 },
+  { string181, fn_require, 1, 1 },
+  { string182, fn_listlibrary, 0, 0 },
+  { string183, fn_make_debouncer, 1, 1 },
+  { string184, fn_update_debouncers, 0, 0 },
+  { string185, fn_debouncer_value, 1, 1 },
+  { string186, fn_debouncer_rose, 1, 1 },
+  { string187, fn_debouncer_fell, 1, 1 },
+  { string188, fn_init_lis3dh, 0, 0 },
+  { string189, fn_lis3dh_bump, 0, 0 },
+  { string190, fn_lis3dh_acceleration, 0, 0 },
 };
 
 // Table lookup functions
@@ -4287,6 +4409,8 @@ object *nextitem (gfun_t gfun) {
   if (ch == ')') return (object *)KET;
   if (ch == '(') return (object *)BRA;
   if (ch == '\'') return (object *)QUO;
+  if (ch == '`') return (object *)QUASIQUO;
+  if (ch == ',') return (object *)UNQUO;
 
   // Parse string
   if (ch == '"') return readstring('"', gfun);
@@ -4320,6 +4444,13 @@ object *nextitem (gfun_t gfun) {
     else if (ch == 0x07) return nextitem(gfun);
     else error2(0, PSTR("Illegal character after #"));
     ch = gfun();
+  /* } else if (ch == ',') { */
+  /*   ch = gfun(); */
+  /*   if (ch == '@') { */
+  /*     return (object *)UNQUOSPLIC; */
+  /*   } else { */
+  /*     return (object *)UNQUO; */
+  /*   } */
   }
   int valid; // 0=undecided, -1=invalid, +1=valid
   if (ch == '.') valid = 0; else if (digitvalue(ch)<base) valid = 1; else valid = -1;
@@ -4389,6 +4520,12 @@ object *readrest (gfun_t gfun) {
       item = readrest(gfun);
     } else if (item == (object *)QUO) {
       item = cons(symbol(QUOTE), cons(read(gfun), NULL));
+    } else if (item == (object *)QUASIQUO) {
+      item = cons(symbol(QUASIQUOTE), cons(read(gfun), NULL));
+    } else if (item == (object *)UNQUO) {
+      item = cons(symbol(UNQUOTE), cons(read(gfun), NULL));
+    } else if (item == (object *)UNQUOSPLIC) {
+      item = cons(symbol(UNQUOTESPLICING), cons(read(gfun), NULL));
     } else if (item == (object *)DOT) {
       tail->cdr = read(gfun);
       if (readrest(gfun) != NULL) error2(0, PSTR("malformed list"));
@@ -4410,6 +4547,9 @@ object *read (gfun_t gfun) {
   if (item == (object *)BRA) return readrest(gfun);
   if (item == (object *)DOT) return read(gfun);
   if (item == (object *)QUO) return cons(symbol(QUOTE), cons(read(gfun), NULL));
+  if (item == (object *)QUASIQUO) return cons(symbol(QUASIQUOTE), cons(read(gfun), NULL));
+  if (item == (object *)UNQUO) return cons(symbol(UNQUOTE), cons(read(gfun), NULL));
+  if (item == (object *)UNQUOSPLIC) return cons(symbol(UNQUOTESPLICING), cons(read(gfun), NULL));
   return item;
 }
 
