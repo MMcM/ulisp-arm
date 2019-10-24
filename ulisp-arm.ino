@@ -90,7 +90,7 @@ LOCALS, MAKUNBOUND, BREAK, READ, PRIN1, PRINT, PRINC, TERPRI, READBYTE, READLINE
 WRITELINE, RESTARTI2C, GC, ROOM, SAVEIMAGE, LOADIMAGE, CLS, PINMODE, DIGITALREAD, DIGITALWRITE,
 ANALOGREAD, ANALOGWRITE, DELAY, MILLIS, SLEEP, NOTE, EDIT, PPRINT, PPRINTALL, REQUIRE, LISTLIBRARY,
 MAKEDEBOUNCER, UPDATEDEBOUNCERS, DEBOUNCERVALUE, DEBOUNCERROSE, DEBOUNCERFELL,
-INITLIS3DH, LIS3DHCLICK, LIS3DHACCELERATION,
+INITLIS3DH, LIS3DHBUMP, LIS3DHACCELERATION,
 ENDFUNCTIONS };
 
 // Typedefs
@@ -3417,13 +3417,13 @@ object *fn_init_lis3dh(object *args, object *env) {
 #endif
 }
 
-object *fn_lis3dh_click(object *args, object *env) {
+object *fn_lis3dh_bump(object *args, object *env) {
 #if defined(lis3dhsupport)
-  uint8_t click = lis.getClick();
-  return (click & 0x10) ? tee : nil;
+  uint8_t bump = lis.getClick();
+  return (bump & 0x10) ? tee : nil;
 #else
   (void) args, (void) env;
-  error2(LIS3DHCLICK, PSTR("not supported"));
+  error2(LIS3DHBUMP, PSTR("not supported"));
   return nil;
 #endif
 }
