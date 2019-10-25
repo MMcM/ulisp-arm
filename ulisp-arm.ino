@@ -3513,12 +3513,23 @@ object *sp_defmacro (object *args, object *env) {
   return var;
 }
 
-object *flatten_and_reverse(object *expr) {
+object *reverse_it(object *l) {
+  object *reversed = NULL;
+  while (l != NULL) {
+    push(first(l),reversed);
+    l = cdr(l);
+  }
+  return reversed;
+}
+
+object *reverse_and_flatten(object *expr) {
   if (!consp(expr))
     return expr;
 
+  object *reversed = reverse_it(expr);
+
   object *result = NULL;
-  for (object *cell = expr; cell != NULL; cell = cdr(cell)) {
+  for (object *cell = reversed; cell != NULL; cell = cdr(cell)) {
     if (!consp(car(cell))) {
       push(car(cell), result);
     } else {
@@ -3527,7 +3538,7 @@ object *flatten_and_reverse(object *expr) {
       }
     }
   }
-  return result;
+  return reverse_it(result);
 }
 
 object *process_quasiquoted(object *expr, int level, object *env) {
@@ -3553,6 +3564,7 @@ object *process_quasiquoted(object *expr, int level, object *env) {
       object *result = eval(car(processed), env);
       Serial.print("**** Result: ");
       printobject(result, pserial);
+      Serial.println("");
       return cons(result, NULL);
     } else {
       object *processed = process_quasiquoted(second(expr), level - 1, env);
@@ -3564,7 +3576,13 @@ object *process_quasiquoted(object *expr, int level, object *env) {
     Serial.println(level);
     if (level == 1) {
       object *processed = process_quasiquoted(second(expr), level, env);
+      Serial.print("**** Processed: ");
+      printobject(car(processed), pserial);
+      Serial.println("");
       object *result = eval(car(processed), env);
+      Serial.print("**** Result: ");
+      printobject(result, pserial);
+      Serial.println("");
       return result;
     } else {
       object *processed = process_quasiquoted(second(expr), level - 1, env);
@@ -3579,7 +3597,14 @@ object *process_quasiquoted(object *expr, int level, object *env) {
       object *processed = process_quasiquoted(car(cell), level, env);
       push(processed, parts);
     }
-    object *result = flatten_and_reverse(parts);
+    Serial.print("**** parts: ");
+    printobject(parts, pserial);
+    Serial.println("");
+
+    object *result = reverse_and_flatten(parts);
+    Serial.print("**** Result: ");
+    printobject(result, pserial);
+    Serial.println("");
     return cons(result, NULL);
   }
 
@@ -3627,8 +3652,8 @@ object *sp_expand (object *args, object *env) {
   object *p;
   object *a;
   for (p = params, a = cdr(args); p != NULL; p = cdr(p), a = cdr(a)) {
-     // push(cons(car(p), eval(car(a), env)), newenv);
-     push(cons(car(p), car(a)), newenv);
+     push(cons(car(p), eval(car(a), env)), newenv);
+     // push(cons(car(p), car(a)), newenv);
      car(GCStack) = newenv;
   }
   object *expanded = expand(body, newenv);
@@ -4126,6 +4151,7 @@ object *eval (object *form, object *env) {
   // It's a list
   object *function = car(form);
   object *args = cdr(form);
+  object *unevaled_args = cdr(form);
 
   if (function == NULL) error(0, PSTR("illegal function"), nil);
   if (!listp(args)) error(0, PSTR("can't evaluate a dotted pair"), args);
@@ -4248,7 +4274,22 @@ object *eval (object *form, object *env) {
     Serial.print(" - body: ");
     printobject(body, pserial);
     Serial.println("");
-    form = expand(body, env);
+
+    object *newenv = env;
+    push(newenv, GCStack);
+    object *p;
+    object *a;
+    for (p = params, a = args; p != NULL; p = cdr(p), a = cdr(a)) {
+      //     push(cons(car(p), eval(car(a), env)), newenv);
+     push(cons(car(p), car(a)), newenv);
+     printobject(car(car(newenv)), pserial);
+     Serial.print(" => ");
+     printobject(cdr(car(newenv)), pserial);
+     Serial.println("");
+     car(GCStack) = newenv;
+    }
+    form = expand(body, newenv);
+    pop(GCStack);
     goto EVAL;
   }
 
