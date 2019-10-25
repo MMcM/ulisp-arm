@@ -4462,6 +4462,7 @@ object *nextitem (gfun_t gfun) {
   if (ch == '\'') return (object *)QUO;
   if (ch == '`') return (object *)BACKTICK;
   if (ch == ',') return (object *)COMMA;
+  if (ch == '@') return (object *)COMMAAT;
 
   // Parse string
   if (ch == '"') return readstring('"', gfun);
