@@ -3605,24 +3605,12 @@ object *sp_unquote_splicing (object *args, object *env) {
 }
 
 
-object *expand (object *params, object *args, object *body, object *env) {
-  if (!consp(params) || !consp(args) || listlength(EXPAND, params) != listlength(EXPAND, args)) {
-    error2(EXPAND, PSTR("params/args mismatch"));
-  }
-  // add params->args to newenv
-  object *newenv = env;
-  push(newenv, GCStack);
-  object *p;
-  object *a;
-  for (p = params, a = args; p != NULL; p = cdr(p), a = cdr(a)) {
-     push(cons(car(p), eval(car(a), env)), newenv);
-     car(GCStack) = newenv;
-  }
-  object *expanded = eval(body, newenv);
-  pop(GCStack);
- return expanded;
+object *expand (object *body, object *env) {
+  object *expanded = eval(body, env);
+  return expanded;
 }
 
+//MOVE arg evaluation to sp_expand
 object *sp_expand (object *args, object *env) {
   object *macro = eval(car(args), env);
   if (!macrop(macro)) {
@@ -3630,7 +3618,22 @@ object *sp_expand (object *args, object *env) {
   }
   object *params = car(cdr(macro));
   object *body = car(cdr(cdr(macro)));
-  return expand(params, cdr(args), body, env);
+  if (!consp(params) || !consp(cdr(args)) || listlength(EXPAND, params) != listlength(EXPAND, cdr(args))) {
+    error2(EXPAND, PSTR("params/args mismatch"));
+  }
+  // add params->args to newenv
+  object *newenv = env;
+  push(newenv, GCStack);
+  object *p;
+  object *a;
+  for (p = params, a = cdr(args); p != NULL; p = cdr(p), a = cdr(a)) {
+     // push(cons(car(p), eval(car(a), env)), newenv);
+     push(cons(car(p), car(a)), newenv);
+     car(GCStack) = newenv;
+  }
+  object *expanded = expand(body, newenv);
+  pop(GCStack);
+  return expanded;
 }
 
 // Built-in procedure names - stored in PROGMEM
@@ -4245,7 +4248,7 @@ object *eval (object *form, object *env) {
     Serial.print(" - body: ");
     printobject(body, pserial);
     Serial.println("");
-    form = expand(params, args, body, env);
+    form = expand(body, env);
     goto EVAL;
   }
 
