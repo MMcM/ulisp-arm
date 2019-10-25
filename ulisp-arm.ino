@@ -72,7 +72,7 @@ const char LispLibrary[] PROGMEM = "(defun load-file (filename) (princ \"Loading
 
 const int TRACEMAX = 3; // Number of traced functions
 enum type { ZERO=0, SYMBOL=2, NUMBER=4, STREAM=6, CHARACTER=8, FLOAT=10, STRING=12, PAIR=14 };  // STRING and PAIR must be last
-enum token { UNUSED, BRA, KET, QUO, DOT, QUASIQUO, UNQUO, UNQUOSPLIC};
+enum token { UNUSED, BRA, KET, QUO, DOT, BACKTICK, COMMA, COMMAAT};
 enum stream { SERIALSTREAM, I2CSTREAM, SPISTREAM, SDSTREAM };
 
 enum function { NIL, TEE, NOTHING, OPTIONAL, AMPREST, LAMBDA, LET, LETSTAR, CLOSURE, SPECIAL_FORMS, QUOTE,
@@ -4460,8 +4460,8 @@ object *nextitem (gfun_t gfun) {
   if (ch == ')') return (object *)KET;
   if (ch == '(') return (object *)BRA;
   if (ch == '\'') return (object *)QUO;
-  if (ch == '`') return (object *)QUASIQUO;
-  if (ch == ',') return (object *)UNQUO;
+  if (ch == '`') return (object *)BACKTICK;
+  if (ch == ',') return (object *)COMMA;
 
   // Parse string
   if (ch == '"') return readstring('"', gfun);
@@ -4498,9 +4498,9 @@ object *nextitem (gfun_t gfun) {
   /* } else if (ch == ',') { */
   /*   ch = gfun(); */
   /*   if (ch == '@') { */
-  /*     return (object *)UNQUOSPLIC; */
+  /*     return (object *)COMMAAT; */
   /*   } else { */
-  /*     return (object *)UNQUO; */
+  /*     return (object *)COMMA; */
   /*   } */
   }
   int valid; // 0=undecided, -1=invalid, +1=valid
@@ -4571,11 +4571,11 @@ object *readrest (gfun_t gfun) {
       item = readrest(gfun);
     } else if (item == (object *)QUO) {
       item = cons(symbol(QUOTE), cons(read(gfun), NULL));
-    } else if (item == (object *)QUASIQUO) {
+    } else if (item == (object *)BACKTICK) {
       item = cons(symbol(QUASIQUOTE), cons(read(gfun), NULL));
-    } else if (item == (object *)UNQUO) {
+    } else if (item == (object *)COMMA) {
       item = cons(symbol(UNQUOTE), cons(read(gfun), NULL));
-    } else if (item == (object *)UNQUOSPLIC) {
+    } else if (item == (object *)COMMAAT) {
       item = cons(symbol(UNQUOTESPLICING), cons(read(gfun), NULL));
     } else if (item == (object *)DOT) {
       tail->cdr = read(gfun);
@@ -4598,9 +4598,9 @@ object *read (gfun_t gfun) {
   if (item == (object *)BRA) return readrest(gfun);
   if (item == (object *)DOT) return read(gfun);
   if (item == (object *)QUO) return cons(symbol(QUOTE), cons(read(gfun), NULL));
-  if (item == (object *)QUASIQUO) return cons(symbol(QUASIQUOTE), cons(read(gfun), NULL));
-  if (item == (object *)UNQUO) return cons(symbol(UNQUOTE), cons(read(gfun), NULL));
-  if (item == (object *)UNQUOSPLIC) return cons(symbol(UNQUOTESPLICING), cons(read(gfun), NULL));
+  if (item == (object *)BACKTICK) return cons(symbol(QUASIQUOTE), cons(read(gfun), NULL));
+  if (item == (object *)COMMA) return cons(symbol(UNQUOTE), cons(read(gfun), NULL));
+  if (item == (object *)COMMAAT) return cons(symbol(UNQUOTESPLICING), cons(read(gfun), NULL));
   return item;
 }
 
