@@ -80,7 +80,7 @@ DEFUN, DEFVAR, SETQ, LOOP, RETURN, PUSH, POP, INCF, DECF, SETF, DOLIST, DOTIMES,
 FORMILLIS, WITHSERIAL, WITHI2C, WITHSPI, WITHSDCARD,
 MACRO, DEFMACRO, QUASIQUOTE, UNQUOTE, UNQUOTESPLICING, EXPAND,
 TAIL_FORMS, PROGN, IF, COND, WHEN, UNLESS, CASE, AND,
-OR, FUNCTIONS, NOT, NULLFN, CONS, ATOM, LISTP, CONSP, SYMBOLP, STREAMP, EQ, CAR, FIRST, CDR, REST, CAAR,
+OR, FUNCTIONS, NOT, NULLFN, CONS, ATOM, LISTP, CONSP, SYMBOLP, STREAMP, EQ, EQUAL, CAR, FIRST, CDR, REST, CAAR,
 CADR, SECOND, CDAR, CDDR, CAAAR, CAADR, CADAR, CADDR, THIRD, CDAAR, CDADR, CDDAR, CDDDR, LENGTH, LIST,
 REVERSE, NTH, ASSOC, MEMBER, APPLY, FUNCALL, APPEND, MAPC, MAPCAR, MAPCAN, ADD, SUBTRACT, MULTIPLY,
 DIVIDE, MOD, ONEPLUS, ONEMINUS, ABS, RANDOM, MAXFN, MINFN, NOTEQ, NUMEQ, LESS, LESSEQ, GREATER, GREATEREQ,
@@ -879,6 +879,23 @@ int eq (object *arg1, object *arg2) {
   if (integerp(arg1) && integerp(arg2)) return true;  // Same integer
   if (floatp(arg1) && floatp(arg2)) return true; // Same float
   if (characterp(arg1) && characterp(arg2)) return true;  // Same character
+  return false;
+}
+
+int equal (object *arg1, object *arg2) {
+  if (eq(arg1, arg2)) return true;
+  if (stringp(arg1) && stringp(arg2)) {
+    object *args = cons(arg1, cons(arg2, nil));
+    return stringcompare(EQUAL, args, false, false, true);
+  }
+  if (consp(arg1) && consp(arg2)) {
+    while (arg1 != nil && arg2 != nil) {
+      if (!equal(car(arg1), car(arg2))) return false;
+      arg1 = cdr(arg1);
+      arg2 = cdr(arg2);
+    }
+    return arg1 == nil && arg2 == nil;
+  }
   return false;
 }
 
@@ -1929,6 +1946,11 @@ object *fn_streamp (object *args, object *env) {
 object *fn_eq (object *args, object *env) {
   (void) env;
   return eq(first(args), second(args)) ? tee : nil;
+}
+
+object *fn_equal (object *args, object *env) {
+  (void) env;
+  return equal(first(args), second(args)) ? tee : nil;
 }
 
 // List functions
@@ -3718,143 +3740,144 @@ const char string51[] PROGMEM = "consp";
 const char string52[] PROGMEM = "symbolp";
 const char string53[] PROGMEM = "streamp";
 const char string54[] PROGMEM = "eq";
-const char string55[] PROGMEM = "car";
-const char string56[] PROGMEM = "first";
-const char string57[] PROGMEM = "cdr";
-const char string58[] PROGMEM = "rest";
-const char string59[] PROGMEM = "caar";
-const char string60[] PROGMEM = "cadr";
-const char string61[] PROGMEM = "second";
-const char string62[] PROGMEM = "cdar";
-const char string63[] PROGMEM = "cddr";
-const char string64[] PROGMEM = "caaar";
-const char string65[] PROGMEM = "caadr";
-const char string66[] PROGMEM = "cadar";
-const char string67[] PROGMEM = "caddr";
-const char string68[] PROGMEM = "third";
-const char string69[] PROGMEM = "cdaar";
-const char string70[] PROGMEM = "cdadr";
-const char string71[] PROGMEM = "cddar";
-const char string72[] PROGMEM = "cdddr";
-const char string73[] PROGMEM = "length";
-const char string74[] PROGMEM = "list";
-const char string75[] PROGMEM = "reverse";
-const char string76[] PROGMEM = "nth";
-const char string77[] PROGMEM = "assoc";
-const char string78[] PROGMEM = "member";
-const char string79[] PROGMEM = "apply";
-const char string80[] PROGMEM = "funcall";
-const char string81[] PROGMEM = "append";
-const char string82[] PROGMEM = "mapc";
-const char string83[] PROGMEM = "mapcar";
-const char string84[] PROGMEM = "mapcan";
-const char string85[] PROGMEM = "+";
-const char string86[] PROGMEM = "-";
-const char string87[] PROGMEM = "*";
-const char string88[] PROGMEM = "/";
-const char string89[] PROGMEM = "mod";
-const char string90[] PROGMEM = "1+";
-const char string91[] PROGMEM = "1-";
-const char string92[] PROGMEM = "abs";
-const char string93[] PROGMEM = "random";
-const char string94[] PROGMEM = "max";
-const char string95[] PROGMEM = "min";
-const char string96[] PROGMEM = "/=";
-const char string97[] PROGMEM = "=";
-const char string98[] PROGMEM = "<";
-const char string99[] PROGMEM = "<=";
-const char string100[] PROGMEM = ">";
-const char string101[] PROGMEM = ">=";
-const char string102[] PROGMEM = "plusp";
-const char string103[] PROGMEM = "minusp";
-const char string104[] PROGMEM = "zerop";
-const char string105[] PROGMEM = "oddp";
-const char string106[] PROGMEM = "evenp";
-const char string107[] PROGMEM = "integerp";
-const char string108[] PROGMEM = "numberp";
-const char string109[] PROGMEM = "float";
-const char string110[] PROGMEM = "floatp";
-const char string111[] PROGMEM = "sin";
-const char string112[] PROGMEM = "cos";
-const char string113[] PROGMEM = "tan";
-const char string114[] PROGMEM = "asin";
-const char string115[] PROGMEM = "acos";
-const char string116[] PROGMEM = "atan";
-const char string117[] PROGMEM = "sinh";
-const char string118[] PROGMEM = "cosh";
-const char string119[] PROGMEM = "tanh";
-const char string120[] PROGMEM = "exp";
-const char string121[] PROGMEM = "sqrt";
-const char string122[] PROGMEM = "log";
-const char string123[] PROGMEM = "expt";
-const char string124[] PROGMEM = "ceiling";
-const char string125[] PROGMEM = "floor";
-const char string126[] PROGMEM = "truncate";
-const char string127[] PROGMEM = "round";
-const char string128[] PROGMEM = "char";
-const char string129[] PROGMEM = "char-code";
-const char string130[] PROGMEM = "code-char";
-const char string131[] PROGMEM = "characterp";
-const char string132[] PROGMEM = "stringp";
-const char string133[] PROGMEM = "string=";
-const char string134[] PROGMEM = "string<";
-const char string135[] PROGMEM = "string>";
-const char string136[] PROGMEM = "sort";
-const char string137[] PROGMEM = "string";
-const char string138[] PROGMEM = "concatenate";
-const char string139[] PROGMEM = "subseq";
-const char string140[] PROGMEM = "read-from-string";
-const char string141[] PROGMEM = "princ-to-string";
-const char string142[] PROGMEM = "prin1-to-string";
-const char string143[] PROGMEM = "logand";
-const char string144[] PROGMEM = "logior";
-const char string145[] PROGMEM = "logxor";
-const char string146[] PROGMEM = "lognot";
-const char string147[] PROGMEM = "ash";
-const char string148[] PROGMEM = "logbitp";
-const char string149[] PROGMEM = "eval";
-const char string150[] PROGMEM = "globals";
-const char string151[] PROGMEM = "locals";
-const char string152[] PROGMEM = "makunbound";
-const char string153[] PROGMEM = "break";
-const char string154[] PROGMEM = "read";
-const char string155[] PROGMEM = "prin1";
-const char string156[] PROGMEM = "print";
-const char string157[] PROGMEM = "princ";
-const char string158[] PROGMEM = "terpri";
-const char string159[] PROGMEM = "read-byte";
-const char string160[] PROGMEM = "read-line";
-const char string161[] PROGMEM = "write-byte";
-const char string162[] PROGMEM = "write-string";
-const char string163[] PROGMEM = "write-line";
-const char string164[] PROGMEM = "restart-i2c";
-const char string165[] PROGMEM = "gc";
-const char string166[] PROGMEM = "room";
-const char string167[] PROGMEM = "save-image";
-const char string168[] PROGMEM = "load-image";
-const char string169[] PROGMEM = "cls";
-const char string170[] PROGMEM = "pinmode";
-const char string171[] PROGMEM = "digitalread";
-const char string172[] PROGMEM = "digitalwrite";
-const char string173[] PROGMEM = "analogread";
-const char string174[] PROGMEM = "analogwrite";
-const char string175[] PROGMEM = "delay";
-const char string176[] PROGMEM = "millis";
-const char string177[] PROGMEM = "sleep";
-const char string178[] PROGMEM = "note";
-const char string179[] PROGMEM = "edit";
-const char string180[] PROGMEM = "pprint";
-const char string181[] PROGMEM = "pprintall";
-const char string182[] PROGMEM = "require";
-const char string183[] PROGMEM = "list-library";
-const char string184[] PROGMEM = "make-debouncer";
-const char string185[] PROGMEM = "update-debouncers";
-const char string186[] PROGMEM = "debouncer-value?";
-const char string187[] PROGMEM = "debouncer-rose?";
-const char string188[] PROGMEM = "debouncer-fell?";
-const char string189[] PROGMEM = "init-lis3dh";
-const char string190[] PROGMEM = "lis3dh-bump?";
-const char string191[] PROGMEM = "lis3dh-acceleration";
+const char string55[] PROGMEM = "equal";
+const char string56[] PROGMEM = "car";
+const char string57[] PROGMEM = "first";
+const char string58[] PROGMEM = "cdr";
+const char string59[] PROGMEM = "rest";
+const char string60[] PROGMEM = "caar";
+const char string61[] PROGMEM = "cadr";
+const char string62[] PROGMEM = "second";
+const char string63[] PROGMEM = "cdar";
+const char string64[] PROGMEM = "cddr";
+const char string65[] PROGMEM = "caaar";
+const char string66[] PROGMEM = "caadr";
+const char string67[] PROGMEM = "cadar";
+const char string68[] PROGMEM = "caddr";
+const char string69[] PROGMEM = "third";
+const char string70[] PROGMEM = "cdaar";
+const char string71[] PROGMEM = "cdadr";
+const char string72[] PROGMEM = "cddar";
+const char string73[] PROGMEM = "cdddr";
+const char string74[] PROGMEM = "length";
+const char string75[] PROGMEM = "list";
+const char string76[] PROGMEM = "reverse";
+const char string77[] PROGMEM = "nth";
+const char string78[] PROGMEM = "assoc";
+const char string79[] PROGMEM = "member";
+const char string80[] PROGMEM = "apply";
+const char string81[] PROGMEM = "funcall";
+const char string82[] PROGMEM = "append";
+const char string83[] PROGMEM = "mapc";
+const char string84[] PROGMEM = "mapcar";
+const char string85[] PROGMEM = "mapcan";
+const char string86[] PROGMEM = "+";
+const char string87[] PROGMEM = "-";
+const char string88[] PROGMEM = "*";
+const char string89[] PROGMEM = "/";
+const char string90[] PROGMEM = "mod";
+const char string91[] PROGMEM = "1+";
+const char string92[] PROGMEM = "1-";
+const char string93[] PROGMEM = "abs";
+const char string94[] PROGMEM = "random";
+const char string95[] PROGMEM = "max";
+const char string96[] PROGMEM = "min";
+const char string97[] PROGMEM = "/=";
+const char string98[] PROGMEM = "=";
+const char string99[] PROGMEM = "<";
+const char string100[] PROGMEM = "<=";
+const char string101[] PROGMEM = ">";
+const char string102[] PROGMEM = ">=";
+const char string103[] PROGMEM = "plusp";
+const char string104[] PROGMEM = "minusp";
+const char string105[] PROGMEM = "zerop";
+const char string106[] PROGMEM = "oddp";
+const char string107[] PROGMEM = "evenp";
+const char string108[] PROGMEM = "integerp";
+const char string109[] PROGMEM = "numberp";
+const char string110[] PROGMEM = "float";
+const char string111[] PROGMEM = "floatp";
+const char string112[] PROGMEM = "sin";
+const char string113[] PROGMEM = "cos";
+const char string114[] PROGMEM = "tan";
+const char string115[] PROGMEM = "asin";
+const char string116[] PROGMEM = "acos";
+const char string117[] PROGMEM = "atan";
+const char string118[] PROGMEM = "sinh";
+const char string119[] PROGMEM = "cosh";
+const char string120[] PROGMEM = "tanh";
+const char string121[] PROGMEM = "exp";
+const char string122[] PROGMEM = "sqrt";
+const char string123[] PROGMEM = "log";
+const char string124[] PROGMEM = "expt";
+const char string125[] PROGMEM = "ceiling";
+const char string126[] PROGMEM = "floor";
+const char string127[] PROGMEM = "truncate";
+const char string128[] PROGMEM = "round";
+const char string129[] PROGMEM = "char";
+const char string130[] PROGMEM = "char-code";
+const char string131[] PROGMEM = "code-char";
+const char string132[] PROGMEM = "characterp";
+const char string133[] PROGMEM = "stringp";
+const char string134[] PROGMEM = "string=";
+const char string135[] PROGMEM = "string<";
+const char string136[] PROGMEM = "string>";
+const char string137[] PROGMEM = "sort";
+const char string138[] PROGMEM = "string";
+const char string139[] PROGMEM = "concatenate";
+const char string140[] PROGMEM = "subseq";
+const char string141[] PROGMEM = "read-from-string";
+const char string142[] PROGMEM = "princ-to-string";
+const char string143[] PROGMEM = "prin1-to-string";
+const char string144[] PROGMEM = "logand";
+const char string145[] PROGMEM = "logior";
+const char string146[] PROGMEM = "logxor";
+const char string147[] PROGMEM = "lognot";
+const char string148[] PROGMEM = "ash";
+const char string149[] PROGMEM = "logbitp";
+const char string150[] PROGMEM = "eval";
+const char string151[] PROGMEM = "globals";
+const char string152[] PROGMEM = "locals";
+const char string153[] PROGMEM = "makunbound";
+const char string154[] PROGMEM = "break";
+const char string155[] PROGMEM = "read";
+const char string156[] PROGMEM = "prin1";
+const char string157[] PROGMEM = "print";
+const char string158[] PROGMEM = "princ";
+const char string159[] PROGMEM = "terpri";
+const char string160[] PROGMEM = "read-byte";
+const char string161[] PROGMEM = "read-line";
+const char string162[] PROGMEM = "write-byte";
+const char string163[] PROGMEM = "write-string";
+const char string164[] PROGMEM = "write-line";
+const char string165[] PROGMEM = "restart-i2c";
+const char string166[] PROGMEM = "gc";
+const char string167[] PROGMEM = "room";
+const char string168[] PROGMEM = "save-image";
+const char string169[] PROGMEM = "load-image";
+const char string170[] PROGMEM = "cls";
+const char string171[] PROGMEM = "pinmode";
+const char string172[] PROGMEM = "digitalread";
+const char string173[] PROGMEM = "digitalwrite";
+const char string174[] PROGMEM = "analogread";
+const char string175[] PROGMEM = "analogwrite";
+const char string176[] PROGMEM = "delay";
+const char string177[] PROGMEM = "millis";
+const char string178[] PROGMEM = "sleep";
+const char string179[] PROGMEM = "note";
+const char string180[] PROGMEM = "edit";
+const char string181[] PROGMEM = "pprint";
+const char string182[] PROGMEM = "pprintall";
+const char string183[] PROGMEM = "require";
+const char string184[] PROGMEM = "list-library";
+const char string185[] PROGMEM = "make-debouncer";
+const char string186[] PROGMEM = "update-debouncers";
+const char string187[] PROGMEM = "debouncer-value?";
+const char string188[] PROGMEM = "debouncer-rose?";
+const char string189[] PROGMEM = "debouncer-fell?";
+const char string190[] PROGMEM = "init-lis3dh";
+const char string191[] PROGMEM = "lis3dh-bump?";
+const char string192[] PROGMEM = "lis3dh-acceleration";
 
 
 const tbl_entry_t lookup_table[] PROGMEM = {
@@ -3913,143 +3936,144 @@ const tbl_entry_t lookup_table[] PROGMEM = {
   { string52, fn_symbolp, 1, 1 },
   { string53, fn_streamp, 1, 1 },
   { string54, fn_eq, 2, 2 },
-  { string55, fn_car, 1, 1 },
+  { string55, fn_equal, 2, 2 },
   { string56, fn_car, 1, 1 },
-  { string57, fn_cdr, 1, 1 },
+  { string57, fn_car, 1, 1 },
   { string58, fn_cdr, 1, 1 },
-  { string59, fn_caar, 1, 1 },
-  { string60, fn_cadr, 1, 1 },
+  { string59, fn_cdr, 1, 1 },
+  { string60, fn_caar, 1, 1 },
   { string61, fn_cadr, 1, 1 },
-  { string62, fn_cdar, 1, 1 },
-  { string63, fn_cddr, 1, 1 },
-  { string64, fn_caaar, 1, 1 },
-  { string65, fn_caadr, 1, 1 },
-  { string66, fn_cadar, 1, 1 },
-  { string67, fn_caddr, 1, 1 },
+  { string62, fn_cadr, 1, 1 },
+  { string63, fn_cdar, 1, 1 },
+  { string64, fn_cddr, 1, 1 },
+  { string65, fn_caaar, 1, 1 },
+  { string66, fn_caadr, 1, 1 },
+  { string67, fn_cadar, 1, 1 },
   { string68, fn_caddr, 1, 1 },
-  { string69, fn_cdaar, 1, 1 },
-  { string70, fn_cdadr, 1, 1 },
-  { string71, fn_cddar, 1, 1 },
-  { string72, fn_cdddr, 1, 1 },
-  { string73, fn_length, 1, 1 },
-  { string74, fn_list, 0, 127 },
-  { string75, fn_reverse, 1, 1 },
-  { string76, fn_nth, 2, 2 },
-  { string77, fn_assoc, 2, 2 },
-  { string78, fn_member, 2, 2 },
-  { string79, fn_apply, 2, 127 },
-  { string80, fn_funcall, 1, 127 },
-  { string81, fn_append, 0, 127 },
-  { string82, fn_mapc, 2, 127 },
-  { string83, fn_mapcar, 2, 127 },
-  { string84, fn_mapcan, 2, 127 },
-  { string85, fn_add, 0, 127 },
-  { string86, fn_subtract, 1, 127 },
-  { string87, fn_multiply, 0, 127 },
-  { string88, fn_divide, 1, 127 },
-  { string89, fn_mod, 2, 2 },
-  { string90, fn_oneplus, 1, 1 },
-  { string91, fn_oneminus, 1, 1 },
-  { string92, fn_abs, 1, 1 },
-  { string93, fn_random, 1, 1 },
-  { string94, fn_maxfn, 1, 127 },
-  { string95, fn_minfn, 1, 127 },
-  { string96, fn_noteq, 1, 127 },
-  { string97, fn_numeq, 1, 127 },
-  { string98, fn_less, 1, 127 },
-  { string99, fn_lesseq, 1, 127 },
-  { string100, fn_greater, 1, 127 },
-  { string101, fn_greatereq, 1, 127 },
-  { string102, fn_plusp, 1, 1 },
-  { string103, fn_minusp, 1, 1 },
-  { string104, fn_zerop, 1, 1 },
-  { string105, fn_oddp, 1, 1 },
-  { string106, fn_evenp, 1, 1 },
-  { string107, fn_integerp, 1, 1 },
-  { string108, fn_numberp, 1, 1 },
-  { string109, fn_floatfn, 1, 1 },
-  { string110, fn_floatp, 1, 1 },
-  { string111, fn_sin, 1, 1 },
-  { string112, fn_cos, 1, 1 },
-  { string113, fn_tan, 1, 1 },
-  { string114, fn_asin, 1, 1 },
-  { string115, fn_acos, 1, 1 },
-  { string116, fn_atan, 1, 2 },
-  { string117, fn_sinh, 1, 1 },
-  { string118, fn_cosh, 1, 1 },
-  { string119, fn_tanh, 1, 1 },
-  { string120, fn_exp, 1, 1 },
-  { string121, fn_sqrt, 1, 1 },
-  { string122, fn_log, 1, 2 },
-  { string123, fn_expt, 2, 2 },
-  { string124, fn_ceiling, 1, 2 },
-  { string125, fn_floor, 1, 2 },
-  { string126, fn_truncate, 1, 2 },
-  { string127, fn_round, 1, 2 },
-  { string128, fn_char, 2, 2 },
-  { string129, fn_charcode, 1, 1 },
-  { string130, fn_codechar, 1, 1 },
-  { string131, fn_characterp, 1, 1 },
-  { string132, fn_stringp, 1, 1 },
-  { string133, fn_stringeq, 2, 2 },
-  { string134, fn_stringless, 2, 2 },
-  { string135, fn_stringgreater, 2, 2 },
-  { string136, fn_sort, 2, 2 },
-  { string137, fn_stringfn, 1, 1 },
-  { string138, fn_concatenate, 1, 127 },
-  { string139, fn_subseq, 2, 3 },
-  { string140, fn_readfromstring, 1, 1 },
-  { string141, fn_princtostring, 1, 1 },
-  { string142, fn_prin1tostring, 1, 1 },
-  { string143, fn_logand, 0, 127 },
-  { string144, fn_logior, 0, 127 },
-  { string145, fn_logxor, 0, 127 },
-  { string146, fn_lognot, 1, 1 },
-  { string147, fn_ash, 2, 2 },
-  { string148, fn_logbitp, 2, 2 },
-  { string149, fn_eval, 1, 1 },
-  { string150, fn_globals, 0, 0 },
-  { string151, fn_locals, 0, 0 },
-  { string152, fn_makunbound, 1, 1 },
-  { string153, fn_break, 0, 0 },
-  { string154, fn_read, 0, 1 },
-  { string155, fn_prin1, 1, 2 },
-  { string156, fn_print, 1, 2 },
-  { string157, fn_princ, 1, 2 },
-  { string158, fn_terpri, 0, 1 },
-  { string159, fn_readbyte, 0, 2 },
-  { string160, fn_readline, 0, 1 },
-  { string161, fn_writebyte, 1, 2 },
-  { string162, fn_writestring, 1, 2 },
-  { string163, fn_writeline, 1, 2 },
-  { string164, fn_restarti2c, 1, 2 },
-  { string165, fn_gc, 0, 0 },
-  { string166, fn_room, 0, 0 },
-  { string167, fn_saveimage, 0, 1 },
-  { string168, fn_loadimage, 0, 1 },
-  { string169, fn_cls, 0, 0 },
-  { string170, fn_pinmode, 2, 2 },
-  { string171, fn_digitalread, 1, 1 },
-  { string172, fn_digitalwrite, 2, 2 },
-  { string173, fn_analogread, 1, 1 },
-  { string174, fn_analogwrite, 2, 2 },
-  { string175, fn_delay, 1, 1 },
-  { string176, fn_millis, 0, 0 },
-  { string177, fn_sleep, 1, 1 },
-  { string178, fn_note, 0, 3 },
-  { string179, fn_edit, 1, 1 },
-  { string180, fn_pprint, 1, 2 },
-  { string181, fn_pprintall, 0, 0 },
-  { string182, fn_require, 1, 1 },
-  { string183, fn_listlibrary, 0, 0 },
-  { string184, fn_make_debouncer, 1, 1 },
-  { string185, fn_update_debouncers, 0, 0 },
-  { string186, fn_debouncer_value, 1, 1 },
-  { string187, fn_debouncer_rose, 1, 1 },
-  { string188, fn_debouncer_fell, 1, 1 },
-  { string189, fn_init_lis3dh, 0, 0 },
-  { string190, fn_lis3dh_bump, 0, 0 },
-  { string191, fn_lis3dh_acceleration, 0, 0 },
+  { string69, fn_caddr, 1, 1 },
+  { string70, fn_cdaar, 1, 1 },
+  { string71, fn_cdadr, 1, 1 },
+  { string72, fn_cddar, 1, 1 },
+  { string73, fn_cdddr, 1, 1 },
+  { string74, fn_length, 1, 1 },
+  { string75, fn_list, 0, 127 },
+  { string76, fn_reverse, 1, 1 },
+  { string77, fn_nth, 2, 2 },
+  { string78, fn_assoc, 2, 2 },
+  { string79, fn_member, 2, 2 },
+  { string80, fn_apply, 2, 127 },
+  { string81, fn_funcall, 1, 127 },
+  { string82, fn_append, 0, 127 },
+  { string83, fn_mapc, 2, 127 },
+  { string84, fn_mapcar, 2, 127 },
+  { string85, fn_mapcan, 2, 127 },
+  { string86, fn_add, 0, 127 },
+  { string87, fn_subtract, 1, 127 },
+  { string88, fn_multiply, 0, 127 },
+  { string89, fn_divide, 1, 127 },
+  { string90, fn_mod, 2, 2 },
+  { string91, fn_oneplus, 1, 1 },
+  { string92, fn_oneminus, 1, 1 },
+  { string93, fn_abs, 1, 1 },
+  { string94, fn_random, 1, 1 },
+  { string95, fn_maxfn, 1, 127 },
+  { string96, fn_minfn, 1, 127 },
+  { string97, fn_noteq, 1, 127 },
+  { string98, fn_numeq, 1, 127 },
+  { string99, fn_less, 1, 127 },
+  { string100, fn_lesseq, 1, 127 },
+  { string101, fn_greater, 1, 127 },
+  { string102, fn_greatereq, 1, 127 },
+  { string103, fn_plusp, 1, 1 },
+  { string104, fn_minusp, 1, 1 },
+  { string105, fn_zerop, 1, 1 },
+  { string106, fn_oddp, 1, 1 },
+  { string107, fn_evenp, 1, 1 },
+  { string108, fn_integerp, 1, 1 },
+  { string109, fn_numberp, 1, 1 },
+  { string110, fn_floatfn, 1, 1 },
+  { string111, fn_floatp, 1, 1 },
+  { string112, fn_sin, 1, 1 },
+  { string113, fn_cos, 1, 1 },
+  { string114, fn_tan, 1, 1 },
+  { string115, fn_asin, 1, 1 },
+  { string116, fn_acos, 1, 1 },
+  { string117, fn_atan, 1, 2 },
+  { string118, fn_sinh, 1, 1 },
+  { string119, fn_cosh, 1, 1 },
+  { string120, fn_tanh, 1, 1 },
+  { string121, fn_exp, 1, 1 },
+  { string122, fn_sqrt, 1, 1 },
+  { string123, fn_log, 1, 2 },
+  { string124, fn_expt, 2, 2 },
+  { string125, fn_ceiling, 1, 2 },
+  { string126, fn_floor, 1, 2 },
+  { string127, fn_truncate, 1, 2 },
+  { string128, fn_round, 1, 2 },
+  { string129, fn_char, 2, 2 },
+  { string130, fn_charcode, 1, 1 },
+  { string131, fn_codechar, 1, 1 },
+  { string132, fn_characterp, 1, 1 },
+  { string133, fn_stringp, 1, 1 },
+  { string134, fn_stringeq, 2, 2 },
+  { string135, fn_stringless, 2, 2 },
+  { string136, fn_stringgreater, 2, 2 },
+  { string137, fn_sort, 2, 2 },
+  { string138, fn_stringfn, 1, 1 },
+  { string139, fn_concatenate, 1, 127 },
+  { string140, fn_subseq, 2, 3 },
+  { string141, fn_readfromstring, 1, 1 },
+  { string142, fn_princtostring, 1, 1 },
+  { string143, fn_prin1tostring, 1, 1 },
+  { string144, fn_logand, 0, 127 },
+  { string145, fn_logior, 0, 127 },
+  { string146, fn_logxor, 0, 127 },
+  { string147, fn_lognot, 1, 1 },
+  { string148, fn_ash, 2, 2 },
+  { string149, fn_logbitp, 2, 2 },
+  { string150, fn_eval, 1, 1 },
+  { string151, fn_globals, 0, 0 },
+  { string152, fn_locals, 0, 0 },
+  { string153, fn_makunbound, 1, 1 },
+  { string154, fn_break, 0, 0 },
+  { string155, fn_read, 0, 1 },
+  { string156, fn_prin1, 1, 2 },
+  { string157, fn_print, 1, 2 },
+  { string158, fn_princ, 1, 2 },
+  { string159, fn_terpri, 0, 1 },
+  { string160, fn_readbyte, 0, 2 },
+  { string161, fn_readline, 0, 1 },
+  { string162, fn_writebyte, 1, 2 },
+  { string163, fn_writestring, 1, 2 },
+  { string164, fn_writeline, 1, 2 },
+  { string165, fn_restarti2c, 1, 2 },
+  { string166, fn_gc, 0, 0 },
+  { string167, fn_room, 0, 0 },
+  { string168, fn_saveimage, 0, 1 },
+  { string169, fn_loadimage, 0, 1 },
+  { string170, fn_cls, 0, 0 },
+  { string171, fn_pinmode, 2, 2 },
+  { string172, fn_digitalread, 1, 1 },
+  { string173, fn_digitalwrite, 2, 2 },
+  { string174, fn_analogread, 1, 1 },
+  { string175, fn_analogwrite, 2, 2 },
+  { string176, fn_delay, 1, 1 },
+  { string177, fn_millis, 0, 0 },
+  { string178, fn_sleep, 1, 1 },
+  { string179, fn_note, 0, 3 },
+  { string180, fn_edit, 1, 1 },
+  { string181, fn_pprint, 1, 2 },
+  { string182, fn_pprintall, 0, 0 },
+  { string183, fn_require, 1, 1 },
+  { string184, fn_listlibrary, 0, 0 },
+  { string185, fn_make_debouncer, 1, 1 },
+  { string186, fn_update_debouncers, 0, 0 },
+  { string187, fn_debouncer_value, 1, 1 },
+  { string188, fn_debouncer_rose, 1, 1 },
+  { string189, fn_debouncer_fell, 1, 1 },
+  { string190, fn_init_lis3dh, 0, 0 },
+  { string191, fn_lis3dh_bump, 0, 0 },
+  { string192, fn_lis3dh_acceleration, 0, 0 },
 };
 
 // Table lookup functions
