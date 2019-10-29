@@ -3674,9 +3674,15 @@ object *sp_expand (object *args, object *env) {
   object *p;
   object *a;
   for (p = params, a = cdr(args); p != NULL; p = cdr(p), a = cdr(a)) {
-     push(cons(car(p), eval(car(a), env)), newenv);
-     // push(cons(car(p), car(a)), newenv);
-     car(GCStack) = newenv;
+    if (car(p)->name == AMPREST) {
+      push(cons(car(cdr(p)), a), newenv);
+      car(GCStack) = newenv;
+      break;
+    } else {
+      // push(cons(car(p), eval(car(a), env)), newenv);
+      push(cons(car(p), car(a)), newenv);
+      car(GCStack) = newenv;
+    }
   }
   object *expanded = expand(body, newenv);
   pop(GCStack);
@@ -4303,14 +4309,16 @@ object *eval (object *form, object *env) {
     push(newenv, GCStack);
     object *p;
     object *a;
-    for (p = params, a = args; p != NULL; p = cdr(p), a = cdr(a)) {
-      //     push(cons(car(p), eval(car(a), env)), newenv);
-     push(cons(car(p), car(a)), newenv);
-     // printobject(car(car(newenv)), pserial);
-     // Serial.print(" => ");
-     // printobject(cdr(car(newenv)), pserial);
-     // Serial.println("");
-     car(GCStack) = newenv;
+    for (p = params, a = unevaled_args; p != NULL; p = cdr(p), a = cdr(a)) {
+      if (car(p)->name == AMPREST) {
+        push(cons(car(cdr(p)), a), newenv);
+        car(GCStack) = newenv;
+        break;
+      } else {
+        // push(cons(car(p), eval(car(a), env)), newenv);
+        push(cons(car(p), car(a)), newenv);
+        car(GCStack) = newenv;
+      }
     }
     form = expand(body, newenv);
     pop(GCStack);
