@@ -4245,8 +4245,16 @@ object *eval (object *form, object *env) {
   form = cdr(form);
   int nargs = 0;
 
-  while (form != NULL){
-    object *obj = cons(eval(car(form),env),NULL);
+  bool is_macro = consp(car(head)) && (issymbol(car(car(head)), MACRO));
+
+  while (form != NULL) {
+    object *obj;
+    // don't evaluate args to a macro
+    if (is_macro) {
+      obj = cons(car(form),NULL);
+    } else {
+      obj = cons(eval(car(form),env),NULL);
+    }
     cdr(tail) = obj;
     tail = obj;
     form = cdr(form);
