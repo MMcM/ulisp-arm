@@ -3659,14 +3659,28 @@ object *expand (object *body, object *env) {
 
 //MOVE arg evaluation to sp_expand
 object *sp_expand (object *args, object *env) {
+  Serial.println("sp_expand");
   object *macro = eval(car(args), env);
   if (!macrop(macro)) {
     error(EXPAND, PSTR("needs a macro"), macro);
   }
   object *params = car(cdr(macro));
   object *body = car(cdr(cdr(macro)));
-  if (!consp(params) || !consp(cdr(args)) || listlength(EXPAND, params) != listlength(EXPAND, cdr(args))) {
-    error2(EXPAND, PSTR("params/args mismatch"));
+
+  if (!consp(params) || !consp(cdr(args))) {
+    error2(EXPAND, PSTR("params and args must be lists"));
+  }
+
+  bool contains_rest = false;
+  for (object *p = params; p != nil; p = cdr(p)) {
+    if (car(p)->name == AMPREST) {
+      contains_rest = true;
+      break;
+    }
+  }
+
+  if (!contains_rest && listlength(EXPAND, params) != listlength(EXPAND, cdr(args))) {
+    error2(EXPAND, PSTR("different number of params and args"));
   }
   // add params->args to newenv
   object *newenv = env;
@@ -3679,8 +3693,8 @@ object *sp_expand (object *args, object *env) {
       car(GCStack) = newenv;
       break;
     } else {
-      // push(cons(car(p), eval(car(a), env)), newenv);
-      push(cons(car(p), car(a)), newenv);
+      push(cons(car(p), eval(car(a), env)), newenv);
+      //push(cons(car(p), car(a)), newenv);
       car(GCStack) = newenv;
     }
   }
@@ -4245,16 +4259,16 @@ object *eval (object *form, object *env) {
   form = cdr(form);
   int nargs = 0;
 
-  bool is_macro = consp(car(head)) && (issymbol(car(car(head)), MACRO));
+  // bool is_macro = consp(car(head)) && (issymbol(car(car(head)), MACRO));
 
   while (form != NULL) {
     object *obj;
     // don't evaluate args to a macro
-    if (is_macro) {
-      obj = cons(car(form),NULL);
-    } else {
+    // if (is_macro) {
+    //   obj = cons(car(form),NULL);
+    // } else {
       obj = cons(eval(car(form),env),NULL);
-    }
+    // }
     cdr(tail) = obj;
     tail = obj;
     form = cdr(form);
@@ -4323,8 +4337,8 @@ object *eval (object *form, object *env) {
         car(GCStack) = newenv;
         break;
       } else {
-        // push(cons(car(p), eval(car(a), env)), newenv);
-        push(cons(car(p), car(a)), newenv);
+        push(cons(car(p), eval(car(a), env)), newenv);
+        //push(cons(car(p), car(a)), newenv);
         car(GCStack) = newenv;
       }
     }
