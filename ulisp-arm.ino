@@ -63,7 +63,7 @@ Adafruit_USBD_MSC usb_msc;
 bool changed;
 std::atomic_flag changed_lock = ATOMIC_FLAG_INIT;
 
-bool auto_load;
+bool autoreload;
 #endif
 
 #if defined(lis3dhsupport)
@@ -3528,7 +3528,7 @@ object *fn_autoreload(object *args, object *env) {
   error2(AUTORELOAD, PSTR("not supported"));
   return nil;
 #endif
-  }
+}
 // LIS3DH support
 
 #if defined(lis3dhsupport)
@@ -3537,7 +3537,7 @@ Adafruit_LIS3DH lis = Adafruit_LIS3DH();
 #endif
 
 object *fn_init_lis3dh(object *args, object *env) {
-  (void) args; (bvoid) env;
+  (void) args; (void) env;
 #if defined(lis3dhsupport)
   if (!lis.begin(0x18)) {
     error2(INITLIS3DH, PSTR("couldn't start LIS3DH"));
@@ -4821,6 +4821,7 @@ void initenv () {
 void setup () {
 #if defined(tinyusb)
   changed = false;
+  autoreload = true;
   flash.begin();
 
   // Set disk vendor id, product id and revision with string up to 8, 16, 4 characters respectively
@@ -4897,17 +4898,19 @@ void msc_flush_cb (void)
 
 void check_for_fs_change(void)
 {
-  while (changed_lock.test_and_set(std::memory_order_acquire))
-    ;
-  bool ch = changed;
-  if (ch) {
-    changed = false;
-  }
-  changed_lock.clear(std::memory_order_release);
+  if (autoreload) {
+    while (changed_lock.test_and_set(std::memory_order_acquire))
+      ;
+    bool ch = changed;
+    if (ch) {
+      changed = false;
+    }
+    changed_lock.clear(std::memory_order_release);
 
-  if (ch) {
-    clrflag(LIBRARYLOADED);
-    error2(0, PSTR("Filesystem change detected. Reloading"));
+    if (ch) {
+      clrflag(LIBRARYLOADED);
+      error2(0, PSTR("Filesystem change detected. Reloading"));
+    }
   }
 }
 
