@@ -4,10 +4,6 @@
    Licensed under the MIT license: https://opensource.org/licenses/MIT
 */
 
-// Lisp Library
-const char LispLibrary[] PROGMEM = "(defun load-file (filename) (princ \"Loading \") (princ filename) (terpri) (with-flash-fs (s filename) (loop (let ((expr (read s))) (if (null expr) (return) (eval expr))))))"
-  "(dolist (fname (with-flash-fs (s \"/filelist.lsp\") (read s))) (load-file fname))";
-
 // Compile options
 
 // #define resetautorun
@@ -19,6 +15,14 @@ const char LispLibrary[] PROGMEM = "(defun load-file (filename) (princ \"Loading
 #define lisplibrary
 #define lis3dhsupport
 
+// Lisp Library
+#if defined(sdcardsupport)
+const char LispLibrary[] PROGMEM = "(defun load-file (filename) (princ \"Loading \") (princ filename) (terpri) (with-sd-card (s filename) (loop (let ((expr (read s))) (if (null expr) (return) (eval expr))))))"
+  "(dolist (fname (with-sd-card (s \"/filelist.lsp\") (read s))) (load-file fname))";
+#elif defined(tinyusb)
+const char LispLibrary[] PROGMEM = "(defun load-file (filename) (princ \"Loading \") (princ filename) (terpri) (with-flash-fs (s filename) (loop (let ((expr (read s))) (if (null expr) (return) (eval expr))))))"
+  "(dolist (fname (with-flash-fs (s \"/filelist.lsp\") (read s))) (load-file fname))";
+#end
 // Includes
 
 //#include "LispLibrary.h"
