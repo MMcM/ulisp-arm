@@ -3671,69 +3671,39 @@ object *reverse_and_flatten(object *expr) {
 }
 
 object *process_quasiquoted(object *expr, int level, object *env) {
-  // Serial.print("**** Processing quasiquote of : ");
-  // printobject(expr, pserial);
-  // Serial.println("");
-  // Serial.print("**** at level ");
-  // Serial.println(level);
   if (!consp(expr)) {
     return cons(expr, NULL);
   }
 
   if (issymbol(car(expr), QUASIQUOTE)) {
-    // Serial.println("Nested quasiquote");
     object *processed = process_quasiquoted(second(expr), level + 1, env);
     return cons(cons(symbol(QUASIQUOTE), processed), NULL);
   } else if (issymbol(car(expr), UNQUOTE)) {
-    // Serial.println("**** Processing UNQUOTE");
-    // Serial.print("**** At level ");
-    // Serial.println(level);
     if (level == 1) {
       object *processed = process_quasiquoted(second(expr), level, env);
       object *result = eval(car(processed), env);
-      // Serial.print("**** Result: ");
-      // printobject(result, pserial);
-      // Serial.println("");
       return cons(result, NULL);
     } else {
       object *processed = process_quasiquoted(second(expr), level - 1, env);
       return cons(cons(symbol(UNQUOTE), processed), NULL);
     }
   } else if (issymbol(car(expr), UNQUOTESPLICING)) {
-    // Serial.println("**** Processing UNQUOTESPLICING");
-    // Serial.print("**** At level ");
-    // Serial.println(level);
     if (level == 1) {
       object *processed = process_quasiquoted(second(expr), level, env);
-      // Serial.print("**** Processed: ");
-      // printobject(car(processed), pserial);
-      // Serial.println("");
       object *result = eval(car(processed), env);
-      // Serial.print("**** Result: ");
-      // printobject(result, pserial);
-      // Serial.println("");
       return result;
     } else {
       object *processed = process_quasiquoted(second(expr), level - 1, env);
       return cons(cons(symbol(UNQUOTESPLICING), processed), NULL);
     }
   } else {
-    // Serial.println("Processing something else");
-    // Serial.print("**** At level ");
-    // Serial.println(level);
     object *parts = NULL;
     for (object *cell = expr; cell != NULL; cell = cdr(cell)) {
       object *processed = process_quasiquoted(car(cell), level, env);
       push(processed, parts);
     }
-    // Serial.print("**** parts: ");
-    // printobject(parts, pserial);
-    // Serial.println("");
 
     object *result = reverse_and_flatten(parts);
-    // Serial.print("**** Result: ");
-    // printobject(result, pserial);
-    // Serial.println("");
     return cons(result, NULL);
   }
 
