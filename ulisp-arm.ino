@@ -4678,13 +4678,6 @@ object *nextitem (gfun_t gfun) {
     else if (ch == 0x07) return nextitem(gfun);
     else error2(0, PSTR("Illegal character after #"));
     ch = gfun();
-  /* } else if (ch == ',') { */
-  /*   ch = gfun(); */
-  /*   if (ch == '@') { */
-  /*     return (object *)COMMAAT; */
-  /*   } else { */
-  /*     return (object *)COMMA; */
-  /*   } */
   }
   int valid; // 0=undecided, -1=invalid, +1=valid
   if (ch == '.') valid = 0; else if (digitvalue(ch)<base) valid = 1; else valid = -1;
