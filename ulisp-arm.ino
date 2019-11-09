@@ -131,6 +131,7 @@ WRITELINE, RESTARTI2C, GC, ROOM, SAVEIMAGE, LOADIMAGE, CLS, PINMODE, DIGITALREAD
 ANALOGREAD, ANALOGWRITE, DELAY, MILLIS, SLEEP, NOTE, EDIT, PPRINT, PPRINTALL, REQUIRE, LISTLIBRARY, AUTORELOAD,
 MAKEDEBOUNCER, UPDATEDEBOUNCERS, DEBOUNCERVALUE, DEBOUNCERROSE, DEBOUNCERFELL,
 INITLIS3DH, LIS3DHBUMP, LIS3DHACCELERATION,
+FORMAT, GENSYM,
 ENDFUNCTIONS };
 
 // Typedefs
@@ -3780,6 +3781,333 @@ object *sp_expand (object *args, object *env) {
   return expanded;
 }
 
+
+// Formatting
+
+bool is_replacement_char(char ch) {
+  return ch == 'A' || ch == 'a' || ch == 'S' || ch == 's';
+}
+
+bool is_digit(char ch) {
+  return (ch >= '0') && (ch <= '9');
+}
+
+bool is_space(char ch) {
+  return ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t';
+}
+
+bool is_terminal_char(char ch) {
+  return ch == '~' || ch == '%';
+}
+
+
+
+int count_replacements(object *string) {
+  int count = 0;
+  int index = 0;
+  int length = stringlength(string);
+  char ch;
+  while (index < length) {
+    ch = nthchar(string, index++);
+    if (ch == '~') {            // an insertion tag
+      ch = nthchar(string, index++);
+      while (is_digit(ch)) {    // skip any number
+        ch = nthchar(string, index++);
+      }
+      while (!is_replacement_char(ch) && !is_terminal_char(ch)) {
+        if (ch == 'v' || ch == 'V') {
+          count++;
+        }
+        ch = nthchar(string, index++);
+      }
+      if (is_replacement_char(ch)) {
+        count++;
+      }
+    }
+  }
+  return count;
+}
+
+char *extract_string(object *string) {
+  int size = stringlength(string);
+  char *buffer = new char[size + 1];
+  for (int i = 0; i < size; i++) {
+    buffer[i] = nthchar(string, i);
+  }
+  buffer[size] = 0;
+  return buffer;
+}
+
+object *fn_format(object *args, object *env) {
+  checkargs(FORMAT, args);
+
+  object *destination = first(args);
+  if (destination != tee and destination != nil and !streamp(destination)) {
+    error(FORMAT, PSTR("Destination must be t, nil, or a stream"), destination);
+  }
+
+  object *control_string_obj = second(args);
+  if (!stringp(control_string_obj)) {
+    error(FORMAT, PSTR("control string must be a string"), control_string_obj);
+  }
+
+  int number_of_replacements = count_replacements(control_string_obj);
+  Serial.print("Number of replacements found: ");
+  Serial.println(number_of_replacements);
+  Serial.print("Number of args: ");
+  Serial.println(listlength(FORMAT, cdr(cdr(args))));
+  if (number_of_replacements != listlength(FORMAT, cdr(cdr(args)))) {
+    error2(FORMAT, PSTR("number of replacements don't match the number of values"));
+  }
+
+  char *control_string = extract_string(control_string_obj);
+  object *arguments = cdr(cdr(args));
+  int index = 0;
+  int length = strlen(control_string);
+  char *parts[number_of_replacements * 2 + 1];
+  uint8_t part_number = 0;
+  uint8_t start = 0;
+  char part_buffer[128];
+  uint8_t buffer_index = 0;
+  uint8_t numeric_arg = 0;
+  bool at_modifier = false;
+  int padding_size = 64;
+  char padding[64];
+  char substitution_char;
+  object *substitution_obj;
+  char * substitution;
+
+  // Serial.print("Control string: ");
+  // Serial.println(control_string);
+
+  while (index < length) {
+    if (control_string[index] == '~') { // start of a substitution
+      at_modifier = false;
+      part_buffer[buffer_index] = 0;
+      parts[part_number++] = strdup(part_buffer);
+      buffer_index = 0;
+      index++;
+      numeric_arg = 0;
+      start = index;
+      while (is_digit(control_string[index])) {
+        index++;
+      }
+      if (start == index) {
+        if (control_string[index] == '#') {
+          numeric_arg = listlength(FORMAT, arguments);
+          index++;
+        } else if (control_string[index] == 'V' || control_string[index] == 'v') {
+          if (integerp(car(arguments))) {
+            numeric_arg = car(arguments)->integer;
+            arguments = cdr(arguments);
+          } else {
+            error(FORMAT, PSTR("size argument mismatch"), car(arguments));
+          }
+          index++;
+        } else {
+          numeric_arg = 0;
+        }
+      } else {
+        for (int i = start; i < index; i++) {
+          numeric_arg *= 10;
+          numeric_arg += control_string[i] - '0';
+        }
+      }
+      if (control_string[index] == '@') {
+        at_modifier = true;
+        index++;
+      }
+      for (int i = 0; i < padding_size; i++) {
+        padding[i] = ' ';
+      }
+      substitution_char = control_string[index];
+      // Serial.print("Substituting: ");
+      // Serial.print(substitution_char);
+      // Serial.print(" at index ");
+      // Serial.println(index);
+      switch (substitution_char) {
+      case 'A':                 // human-readable string
+      case 'a':
+        substitution_obj = fn_prin1tostring(cons(car(arguments), nil), env);
+        substitution = extract_string(substitution_obj);
+        // Serial.print("Substituting ");
+        // Serial.println(substitution);
+        if (strlen(substitution) < numeric_arg) {
+          padding[numeric_arg - strlen(substitution)] = 0;
+        } else {
+          padding[0] = 0;
+        }
+        if (at_modifier) {
+          parts[part_number++] = strdup(padding);
+        }
+        parts[part_number++] = substitution;
+        if (!at_modifier) {
+          parts[part_number++] = strdup(padding);
+        }
+        arguments = cdr(arguments);
+        start = index + 1;
+        break;
+      case 'S':                 // lisp-readable string
+      case 's':
+        substitution_obj = fn_princtostring(cons(car(arguments), nil), env);
+        substitution = extract_string(substitution_obj);
+        // Serial.print("Substituting ");
+        // Serial.println(substitution);
+        if (strlen(substitution) < numeric_arg) {
+          padding[numeric_arg - strlen(substitution)] = 0;
+        } else {
+          padding[0] = 0;
+        }
+        if (at_modifier) {
+          parts[part_number++] = strdup(padding);
+        }
+        parts[part_number++] = substitution;
+        if (!at_modifier) {
+          parts[part_number++] = strdup(padding);
+        }
+        arguments = cdr(arguments);
+        start = index + 1;
+        break;
+      case '%':
+        if (numeric_arg > 0) {
+          for (int i = 0; i < numeric_arg; i++) {
+            part_buffer[i] = '\n';
+          }
+          part_buffer[numeric_arg] = 0;
+          parts[part_number++] = strdup(part_buffer);
+        } else {
+          parts[part_number++] = strdup("\n");
+        }
+        break;
+      case '~':
+        if (numeric_arg > 0) {
+          for (int i = 0; i < numeric_arg; i++) {
+            part_buffer[i] = '~';
+          }
+          part_buffer[numeric_arg] = 0;
+          parts[part_number++] = strdup(part_buffer);
+        } else {
+          parts[part_number++] = strdup("~");
+        }
+        break;
+      case '\n':
+        while (index < length && is_space(control_string[index])) {
+          index ++;
+        }
+        if (at_modifier) {
+          parts[part_number++] = strdup("\n");
+        }
+        start = index;
+        index --;
+        break;
+      default:
+        error2(FORMAT, PSTR("unsupported substitution"));
+        break;
+      }
+    } else {
+      part_buffer[buffer_index++] = control_string[index];
+    }
+    index++;
+  }
+
+
+  if (start < length) {
+    buffer_index = 0;
+    for (int i = start; i < length; i++) {
+      part_buffer[buffer_index++] = control_string[i];
+    }
+    parts[part_number++] = strdup(part_buffer);
+  }
+
+  delete control_string;
+
+  object *result_obj = NULL;
+  int chars = 0;
+  for (int p = 0; p < part_number; p++) {
+    for (char *cp = parts[p]; *cp;  cp++) {
+      buildstring(*cp, &chars, &result_obj);
+    }
+    free(parts[p]);
+  }
+  object *obj = myalloc();
+  obj->type = STRING;
+  obj->cdr = result_obj;
+
+  if (streamp(destination)) {
+    printstring(obj, pstreamfun(cons(destination, nil)));
+    myfree(obj);
+  } else if (destination == tee) {
+    printstring(obj, pserial);
+    myfree(obj);
+  } else {
+    return obj;
+  }
+
+  return nil;
+
+}
+
+#define GENSYM_TABLE_SIZE (64)
+typedef struct {
+  char *key;
+  uint16_t value;
+} key_value_pair_t;
+
+key_value_pair_t gensym_table[GENSYM_TABLE_SIZE];
+
+// gensym
+
+object *fn_gensym(object *args, object *env) {
+  checkargs(GENSYM, args);
+  char *prefix;
+
+  // compute the prefix
+  if (args == nil) {
+    prefix = strdup("GENSYM");
+  } else {
+    if (!stringp(car(args)) && !symbolp(car(args))) {
+      error(GENSYM, PSTR("prefix must be a string or symbol"), car(args));
+    }
+    if (stringp(car(args))) {
+      prefix = extract_string(car(args));
+    } else {
+      prefix = strdup(symbolname(car(args)->name));
+    }
+  }
+
+  // find the entry
+  key_value_pair_t *found = NULL;
+  for (int i = 0; i < GENSYM_TABLE_SIZE; i++) {
+    if (gensym_table[i].key == NULL || strcmp(prefix, gensym_table[i].key) == 0) {
+      found = &gensym_table[i];
+      break;
+    }
+  }
+
+  if (found == NULL) {          // table is full
+    error2(GENSYM, PSTR("gensym storage exhausted"));
+  }
+
+  // update the count
+  uint16_t count = found->value;
+  if (count == 0) {
+    found->key = strdup(prefix);
+    count = 1;
+  } else {
+    count++;
+  }
+  found->value = count;
+
+  // make the new symbol
+
+  char *buffer = SymbolTop;
+  sprintf(buffer, "%s-%d", prefix, count);
+
+  free(prefix);
+
+  return newsymbol(longsymbol(buffer));
+}
+
 // Built-in procedure names - stored in PROGMEM
 
 const char string0[] PROGMEM = "nil";
@@ -3977,6 +4305,8 @@ const char string191[] PROGMEM = "debouncer-fell?";
 const char string192[] PROGMEM = "init-lis3dh";
 const char string193[] PROGMEM = "lis3dh-bump?";
 const char string194[] PROGMEM = "lis3dh-acceleration";
+const char string195[] PROGMEM = "format";
+const char string196[] PROGMEM = "gensym";
 
 
 const tbl_entry_t lookup_table[] PROGMEM = {
@@ -4175,6 +4505,8 @@ const tbl_entry_t lookup_table[] PROGMEM = {
   { string192, fn_init_lis3dh, 0, 0 },
   { string193, fn_lis3dh_bump, 0, 0 },
   { string194, fn_lis3dh_acceleration, 0, 0 },
+  { string195, fn_format, 2, 127 },
+  { string196, fn_gensym, 0, 1 },
 };
 
 // Table lookup functions
