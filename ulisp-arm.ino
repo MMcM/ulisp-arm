@@ -1886,7 +1886,6 @@ object *sp_withflashfs (object *args, object *env) {
   object *var = first(params);
   object *filename = eval(second(params), env);
   params = cddr(params);
-  //  SD.begin(SDCARD_SS_PIN);
   int mode = 0;
   if (params != NULL && first(params) != NULL) mode = checkinteger(WITHFLASHFS, first(params));
   int oflag = O_READ;
