@@ -131,7 +131,7 @@ WRITELINE, RESTARTI2C, GC, ROOM, SAVEIMAGE, LOADIMAGE, CLS, PINMODE, DIGITALREAD
 ANALOGREAD, ANALOGWRITE, DELAY, MILLIS, SLEEP, NOTE, EDIT, PPRINT, PPRINTALL, REQUIRE, LISTLIBRARY, AUTORELOAD,
 MAKEDEBOUNCER, UPDATEDEBOUNCERS, DEBOUNCERVALUE, DEBOUNCERROSE, DEBOUNCERFELL,
 INITLIS3DH, LIS3DHBUMP, LIS3DHACCELERATION,
-FORMAT, GENSYM,
+FORMAT, GENSYM, INTERN,
 ENDFUNCTIONS };
 
 // Typedefs
@@ -4107,6 +4107,19 @@ object *fn_gensym(object *args, object *env) {
   return newsymbol(longsymbol(buffer));
 }
 
+
+object *fn_intern(object *args, object *env) {
+  checkargs(GENSYM, args);
+  if (!stringp(car(args))) {
+    error(INTERN, PSTR("can only intern strings"), car(args));
+  }
+  char *name = extract_string(car(args));
+  char *buffer = SymbolTop;
+  strcpy(buffer, name);
+  free(name);
+  return newsymbol(longsymbol(buffer));
+}
+
 // Built-in procedure names - stored in PROGMEM
 
 const char string0[] PROGMEM = "nil";
@@ -4306,6 +4319,7 @@ const char string193[] PROGMEM = "lis3dh-bump?";
 const char string194[] PROGMEM = "lis3dh-acceleration";
 const char string195[] PROGMEM = "format";
 const char string196[] PROGMEM = "gensym";
+const char string197[] PROGMEM = "intern";
 
 
 const tbl_entry_t lookup_table[] PROGMEM = {
@@ -4506,6 +4520,7 @@ const tbl_entry_t lookup_table[] PROGMEM = {
   { string194, fn_lis3dh_acceleration, 0, 0 },
   { string195, fn_format, 2, 127 },
   { string196, fn_gensym, 0, 1 },
+  { string197, fn_intern, 1, 1 },
 };
 
 // Table lookup functions
