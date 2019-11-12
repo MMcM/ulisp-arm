@@ -1892,11 +1892,11 @@ object *sp_withflashfs (object *args, object *env) {
   if (mode == 1) oflag = O_RDWR | O_CREAT | O_APPEND; else if (mode == 2) oflag = O_RDWR | O_CREAT | O_TRUNC;
   if (mode >= 1) {
     if (!FSpfile.open(MakeFilename(filename), oflag)) {
-      error2(WITHSDCARD, PSTR("problem writing to SD card"));
+      error(WITHFLASHFS, PSTR("problem writing to flash filesystem"), filename);
     }
   } else {
     if (!FSgfile.open(MakeFilename(filename), oflag)) {
-      error2(WITHSDCARD, PSTR("problem reading from SD card"));
+      error(WITHFLASHFS, PSTR("problem reading from flash filesystem"), filename);
     }
   }
   object *pair = cons(var, stream(FSSTREAM, 1));
