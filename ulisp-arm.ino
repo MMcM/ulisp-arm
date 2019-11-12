@@ -5005,10 +5005,16 @@ object *nextitem (gfun_t gfun) {
   int ch = gfun();
   while(isspace(ch)) ch = gfun();
 
-  if (ch == ';') {
-    while(ch != '(') ch = gfun();
-    ch = '(';
+  while (ch == ';') {           // handle multiple comment lines
+    ch = gfun();
+    while(ch != '\n' && ch != -1) {
+      ch = gfun();
+    }
+    while(isspace(ch)) {
+      ch = gfun();
+    }
   }
+
   if (ch == '\n') ch = gfun();
   if (ch == -1) return nil;
   if (ch == ')') return (object *)KET;
