@@ -5111,8 +5111,19 @@ object *nextitem (gfun_t gfun) {
   int x = builtin(buffer);
   if (x == NIL) return nil;
   if (x < ENDFUNCTIONS) return newsymbol(x);
-  else if (index < 4 && valid40(buffer)) return newsymbol(pack40(buffer));
-  else return newsymbol(longsymbol(buffer));
+  else if (index < 4 && valid40(buffer)) {
+    object *sym = newsymbol(pack40(buffer));
+    if (buffer[0] == ':') {     // handle keyword
+      push(cons(sym, sym), GlobalEnv);
+    }
+    return sym;
+  } else {
+    object *sym = newsymbol(longsymbol(buffer));
+    if (buffer[0] == ':') {     // handle keyword
+      push(cons(sym, sym), GlobalEnv);
+    }
+    return sym;
+  }
 }
 
 object *readrest (gfun_t gfun) {
