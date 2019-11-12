@@ -3700,7 +3700,11 @@ object *process_quasiquoted(object *expr, int level, object *env) {
     if (level == 1) {
       object *processed = process_quasiquoted(second(expr), level, env);
       object *result = eval(car(processed), env);
-      return result;
+      if (result == nil) {
+        return (object*)-1;     // sentinal to signal that @... should insert nothing (i.e. empty list)
+      } else {
+        return result;
+      }
     } else {
       object *processed = process_quasiquoted(second(expr), level - 1, env);
       return cons(cons(symbol(UNQUOTESPLICING), processed), NULL);
@@ -3709,7 +3713,9 @@ object *process_quasiquoted(object *expr, int level, object *env) {
     object *parts = NULL;
     for (object *cell = expr; cell != NULL; cell = cdr(cell)) {
       object *processed = process_quasiquoted(car(cell), level, env);
-      push(processed, parts);
+      if (processed != (object*)-1) { // Check for empty list insertion sentinal
+        push(processed, parts);
+      }
     }
 
     object *result = reverse_and_flatten(parts);
@@ -3745,7 +3751,6 @@ object *expand (object *body, object *env) {
 
 //MOVE arg evaluation to sp_expand
 object *sp_expand (object *args, object *env) {
-  Serial.println("sp_expand");
   object *macro = eval(car(args), env);
   if (!macrop(macro)) {
     error(EXPAND, PSTR("needs a macro"), macro);
