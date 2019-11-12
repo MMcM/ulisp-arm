@@ -1,3 +1,4 @@
+/* -*- mode: c++; -*- */
 /* uLisp ARM 2.9b - www.ulisp.com
    David Johnson-Davies - www.technoblogy.com - 25th September 2019
 
