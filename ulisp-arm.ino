@@ -3864,17 +3864,25 @@ object *fn_format(object *args, object *env) {
     error(FORMAT, PSTR("control string must be a string"), control_string_obj);
   }
 
+  char *control_string = extract_string(control_string_obj);
+  object *arguments = cdr(cdr(args));
+
+  // Serial.print("Control string: ");
+  // Serial.println(control_string);
+  // Serial.print("Args: ");
+  // printobject(arguments, pserial);
+  // Serial.println("");
+
+
   int number_of_replacements = count_replacements(control_string_obj);
-  Serial.print("Number of replacements found: ");
-  Serial.println(number_of_replacements);
-  Serial.print("Number of args: ");
-  Serial.println(listlength(FORMAT, cdr(cdr(args))));
+  // Serial.print("Number of replacements found: ");
+  // Serial.println(number_of_replacements);
+  // Serial.print("Number of args: ");
+  // Serial.println(listlength(FORMAT, cdr(cdr(args))));
   if (number_of_replacements != listlength(FORMAT, cdr(cdr(args)))) {
     error2(FORMAT, PSTR("number of replacements don't match the number of values"));
   }
 
-  char *control_string = extract_string(control_string_obj);
-  object *arguments = cdr(cdr(args));
   int index = 0;
   int length = strlen(control_string);
   char *parts[number_of_replacements * 2 + 1];
@@ -3889,9 +3897,6 @@ object *fn_format(object *args, object *env) {
   char substitution_char;
   object *substitution_obj;
   char * substitution;
-
-  // Serial.print("Control string: ");
-  // Serial.println(control_string);
 
   while (index < length) {
     if (control_string[index] == '~') { // start of a substitution
