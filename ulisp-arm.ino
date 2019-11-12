@@ -4135,7 +4135,7 @@ object *fn_gensym(object *args, object *env) {
 
 
 object *fn_intern(object *args, object *env) {
-  checkargs(GENSYM, args);
+  checkargs(INTERN, args);
   if (!stringp(car(args))) {
     error(INTERN, PSTR("can only intern strings"), car(args));
   }
