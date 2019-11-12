@@ -68,6 +68,7 @@ Adafruit_USBD_MSC usb_msc;
 // Set to true when PC write to flash
 bool changed;
 std::atomic_flag changed_lock = ATOMIC_FLAG_INIT;
+bool reload_required = false;   // set before throwing an error when a system restart/reload is required (filesystem change)
 
 bool autoreload;
 #endif
@@ -285,6 +286,7 @@ void error2 (symbol_t fname, PGM_P string);
 // Set up workspace
 
 void initworkspace () {
+  Freespace = 0;
   Freelist = NULL;
   for (int i=WORKSPACESIZE-1; i>=0; i--) {
     object *obj = &Workspace[i];
@@ -3586,6 +3588,13 @@ object *fn_lis3dh_acceleration(object *args, object *env) {
 Bounce *debouncers[16];
 int number_of_debouncers = 0;
 
+void reset_debouncers(void) {
+  for (int i = 0; i < number_of_debouncers; i++) {
+    delete debouncers[i];
+  }
+  number_of_debouncers = 0;
+}
+
 object *fn_make_debouncer(object *args, object *env) {
   if (number_of_debouncers == 16) {
     error2(MAKEDEBOUNCER, PSTR("too many debouncers requested"));
@@ -4055,6 +4064,13 @@ typedef struct {
 key_value_pair_t gensym_table[GENSYM_TABLE_SIZE];
 
 // gensym
+
+void reset_gensym(void) {
+  for (int i = 0; i < GENSYM_TABLE_SIZE; i++) {
+    free(gensym_table[i].key);
+    gensym_table[i].key = NULL;
+  }
+}
 
 object *fn_gensym(object *args, object *env) {
   checkargs(GENSYM, args);
@@ -5136,7 +5152,7 @@ void initenv () {
 void setup () {
 #if defined(tinyusb)
   changed = false;
-  autoreload = true;
+  autoreload = false;
   flash.begin();
 
   // Set disk vendor id, product id and revision with string up to 8, 16, 4 characters respectively
@@ -5223,7 +5239,7 @@ void check_for_fs_change(void)
     changed_lock.clear(std::memory_order_release);
 
     if (ch) {
-      clrflag(LIBRARYLOADED);
+      reload_required = true;
       error2(0, PSTR("Filesystem change detected. Reloading"));
     }
   }
@@ -5274,6 +5290,19 @@ void loop () {
   // Come here after error
   delay(100); while (Serial.available()) Serial.read();
   for (int i=0; i<TRACEMAX; i++) TraceDepth[i] = 0;
+#if defined(tinyusb)
+  // A change was detected on the flash filesystem, so we
+  // reset the system and reload lisplibrary (below)
+  if (reload_required) {
+    SymbolTop = SymbolTable;
+    initworkspace();
+    initenv();
+    reset_gensym();
+    reset_debouncers;
+    pfstring(PSTR("uLisp 2.9 restarting"), pserial);
+    pln(pserial);
+  }
+#endif
   #if defined(sdcardsupport)
   SDpfile.close(); SDgfile.close();
   #endif
@@ -5281,7 +5310,18 @@ void loop () {
   FSpfile.close(); FSgfile.close();
   #endif
   #if defined(lisplibrary)
-  if (!tstflag(LIBRARYLOADED)) { setflag(LIBRARYLOADED); loadfromlibrary(NULL); }
+  #if defined(tinyusb)
+  // reload becasue the filesystem changed
+  if (reload_required) {
+    reload_required = false;
+    loadfromlibrary(NULL);
+  }
+  #endif
+  // load the first time
+  if (!tstflag(LIBRARYLOADED)) {
+    setflag(LIBRARYLOADED);
+    loadfromlibrary(NULL);
+  }
   #endif
   repl(NULL);
 }
