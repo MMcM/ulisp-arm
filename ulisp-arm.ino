@@ -1158,7 +1158,13 @@ object *apply (symbol_t name, object *function, object *args, object *env) {
 // In-place operations
 
 object **place (symbol_t name, object *args, object *env) {
-  if (atom(args)) return &cdr(findvalue(args, env));
+  if (atom(args)) {
+    if (*symbolname(args->name) == ':') {
+      error2(name, PSTR("can't use a keyword"));
+    } else {
+      return &cdr(findvalue(args, env));
+    }
+  }
   object* function = first(args);
   if (issymbol(function, CAR) || issymbol(function, FIRST)) {
     object *value = eval(second(args), env);
