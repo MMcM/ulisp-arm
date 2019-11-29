@@ -8,7 +8,7 @@
 // Compile options
 
 // #define resetautorun
-#define printfreespace
+// #define printfreespace
 #define serialmonitor
 // #define printgcs
 //#define sdcardsupport
