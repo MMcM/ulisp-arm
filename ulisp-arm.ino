@@ -4041,6 +4041,7 @@ object *fn_format(object *args, object *env) {
     for (int i = start; i < length; i++) {
       part_buffer[buffer_index++] = control_string[i];
     }
+    part_buffer[buffer_index] = 0;
     parts[part_number++] = strdup(part_buffer);
   }
 
