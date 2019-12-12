@@ -3892,10 +3892,10 @@ object *fn_format(object *args, object *env) {
 
   int index = 0;
   int length = strlen(control_string);
-  char *parts[number_of_replacements * 2 + 1];
+  char *parts[number_of_replacements * 2 + 1]; // account for replacements, possible interstitial literals, and a starting and finishing literal
   uint8_t part_number = 0;
   uint8_t start = 0;
-  char part_buffer[128];
+  char part_buffer[128];        // A guess at being more than enough for any one literal chunk
   uint8_t buffer_index = 0;
   uint8_t numeric_arg = 0;
   bool at_modifier = false;
